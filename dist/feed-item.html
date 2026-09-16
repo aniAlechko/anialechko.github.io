@@ -1,0 +1,25 @@
+<!-- Shared layout for the six placeholder feed pages. -->
+<section class="feed-detail shell" id="feed-item" aria-labelledby="feed-item-title">
+  <div class="feed-detail-stage">
+    <a class="feed-neighbor" href="/feed/feed-image-{{previous}}" aria-label="Previous: feed image {{previous}}" data-cursor-arrow="←">
+      <div class="placeholder"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg><span>Feed image {{previous}}</span></div>
+      <span class="feed-neighbor-label">← Previous</span>
+    </a>
+    <figure class="placeholder feed-detail-media" aria-label="Feed image {{current}} placeholder">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+      <span>Feed image {{current}}</span>
+    </figure>
+    <a class="feed-neighbor" href="/feed/feed-image-{{next}}" aria-label="Next: feed image {{next}}" data-cursor-arrow="→">
+      <div class="placeholder"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg><span>Feed image {{next}}</span></div>
+      <span class="feed-neighbor-label">Next →</span>
+    </a>
+  </div>
+  <div class="feed-detail-description">
+    <div class="feed-detail-copy">
+      <h1 id="feed-item-title">Feed image {{current}}</h1>
+      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+      <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>
+      <a class="feed-return" href="/feed" data-cursor-arrow="←">← Back to feed</a>
+    </div>
+  </div>
+</section>

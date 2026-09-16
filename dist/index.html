@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="A local portfolio wireframe with placeholder content." />
+  <meta name="color-scheme" content="dark" />
+  <!-- Paint the page background before the external stylesheet arrives. -->
+  <style>html { background: #080808; }</style>
+  <title>Alex Rivkin — Portfolio</title>
+  <link rel="preload" href="/fonts/RubikVariable.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23111' d='M0 0h32v32H0z'/%3E%3Cpath stroke='%23ddd' d='m7 7 18 18M25 7 7 25'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body id="home" data-page="home">
+  <canvas class="space-fabric" aria-hidden="true"></canvas>
+  <a class="skip-link" href="#work">Skip to work</a>
+  <header class="site-header">
+    <div class="header-inner shell">
+      <a class="site-brand" href="/">ALEX RIVKIN</a>
+      <button class="menu-toggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="site-navigation">
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+      </button>
+      <nav class="navigation" id="site-navigation" aria-label="Main navigation">
+        <a href="/" aria-current="page">Home</a>
+        <a href="/work">Work</a>
+        <a href="/feed">Feed</a>
+        <a href="/about">About</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <!-- page-content:start -->
+    <section class="hero shell" aria-labelledby="name">
+      <h1 id="name">
+        <span>Rivkin</span>
+        <span class="name-given">Alex</span>
+      </h1>
+      <div class="placeholder hero-visual">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+        <!-- Add the portfolio reel's src here. No audio plays in placeholder mode. -->
+        <video class="hero-video" muted loop playsinline preload="metadata" hidden></video>
+        <span>Video placeholder<small class="hero-demo-note" id="hero-demo-note">Sound toggle demo · no video yet</small></span>
+        <button class="hero-sound" type="button" data-muted="true" aria-label="Unmute video demo" aria-describedby="hero-demo-note">
+          <span class="control-icon" aria-hidden="true"><svg class="icon sound-on"><use href="#icon-sound-on" /></svg><svg class="icon sound-off"><use href="#icon-sound-off" /></svg></span>
+        </button>
+      </div>
+      <div class="hero-copy">
+        <p>Product Designer<br />UX UI</p>
+        <div class="company-marquee" aria-label="Placeholder companies">
+          <div class="company-window">
+            <div class="company-track">
+              <ul class="company-logos">
+                <li><span class="company-mark mark-orbit" aria-hidden="true"></span>Company 01</li>
+                <li><span class="company-mark mark-grid" aria-hidden="true"></span>Company 02</li>
+                <li><span class="company-mark mark-bars" aria-hidden="true"></span>Company 03</li>
+                <li><span class="company-mark mark-orbit" aria-hidden="true"></span>Company 04</li>
+                <li><span class="company-mark mark-grid" aria-hidden="true"></span>Company 05</li>
+                <li><span class="company-mark mark-bars" aria-hidden="true"></span>Company 06</li>
+              </ul>
+            </div>
+          </div>
+          <button class="company-motion" type="button" aria-label="Pause company logos" aria-pressed="false" hidden>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path class="ticker-pause" d="M5 3v10M11 3v10" /><path class="ticker-play" d="m5 3 8 5-8 5Z" /></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- section:work:start -->
+    <section class="work shell" id="work" aria-labelledby="work-heading">
+      <h2 class="section-title" id="work-heading">WORK</h2>
+      <article class="project" aria-labelledby="project-one">
+        <div class="placeholder project-visual" data-cursor-label="Project&#10;01">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+          <span>Project image 01</span>
+        </div>
+        <div class="project-caption">
+          <h3 id="project-one">Project one</h3>
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt.</p>
+        </div>
+      </article>
+      <article class="project project-secondary" aria-labelledby="project-two">
+        <div class="placeholder project-visual" data-cursor-label="Project&#10;02">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+          <span>Project image 02</span>
+        </div>
+        <div class="project-caption">
+          <h3 id="project-two">Project two</h3>
+          <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>
+        </div>
+      </article>
+    </section>
+
+    <!-- section:work:end -->
+
+    <!-- section:feed:start -->
+    <section class="feed shell" id="feed" aria-labelledby="feed-heading">
+      <div class="feed-header">
+        <h2 class="section-title feed-heading" id="feed-heading" aria-label="Feed"><span style="--step: 0" aria-hidden="true">F</span><span style="--step: 1" aria-hidden="true">E</span><span style="--step: 2" aria-hidden="true">E</span><span style="--step: 3" aria-hidden="true">D</span></h2>
+        <div class="feed-intro">
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+          <p>Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+        </div>
+      </div>
+      <div class="feed-gallery">
+        <div class="feed-row">
+          <figure class="placeholder feed-item" aria-label="Feed image 01 placeholder">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+            <span>Feed image 01</span>
+            <a class="feed-open" href="/feed/feed-image-01" aria-label="View feed image 01"><span class="control-icon" aria-hidden="true"><svg class="icon"><use href="#icon-plus" /></svg></span></a>
+          </figure>
+          <figure class="placeholder feed-item" aria-label="Feed image 02 placeholder">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+            <span>Feed image 02</span>
+            <a class="feed-open" href="/feed/feed-image-02" aria-label="View feed image 02"><span class="control-icon" aria-hidden="true"><svg class="icon"><use href="#icon-plus" /></svg></span></a>
+          </figure>
+          <figure class="placeholder feed-item" aria-label="Feed image 03 placeholder">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+            <span>Feed image 03</span>
+            <a class="feed-open" href="/feed/feed-image-03" aria-label="View feed image 03"><span class="control-icon" aria-hidden="true"><svg class="icon"><use href="#icon-plus" /></svg></span></a>
+          </figure>
+        </div>
+        <div class="feed-row">
+          <figure class="placeholder feed-item" aria-label="Feed image 04 placeholder">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+            <span>Feed image 04</span>
+            <a class="feed-open" href="/feed/feed-image-04" aria-label="View feed image 04"><span class="control-icon" aria-hidden="true"><svg class="icon"><use href="#icon-plus" /></svg></span></a>
+          </figure>
+          <figure class="placeholder feed-item" aria-label="Feed image 05 placeholder">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+            <span>Feed image 05</span>
+            <a class="feed-open" href="/feed/feed-image-05" aria-label="View feed image 05"><span class="control-icon" aria-hidden="true"><svg class="icon"><use href="#icon-plus" /></svg></span></a>
+          </figure>
+          <figure class="placeholder feed-item" aria-label="Feed image 06 placeholder">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+            <span>Feed image 06</span>
+            <a class="feed-open" href="/feed/feed-image-06" aria-label="View feed image 06"><span class="control-icon" aria-hidden="true"><svg class="icon"><use href="#icon-plus" /></svg></span></a>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- section:feed:end -->
+
+    <!-- section:about:start -->
+    <section class="about" id="about" aria-labelledby="about-heading">
+      <div class="shell">
+        <h2 class="section-title" id="about-heading" data-fit-width>KAWABANGA*</h2>
+        <div class="about-grid">
+          <div class="placeholder portrait">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><use href="#placeholder-cross" /></svg>
+            <span>Portrait</span>
+          </div>
+          <div class="bio">
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+            <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>
+            <span class="resume-placeholder">Résumé placeholder</span>
+          </div>
+          <div class="contact-copy" id="contact">
+            <div>
+              <h3 class="eyebrow">Contact</h3>
+              <p>Email address placeholder</p>
+            </div>
+            <div>
+              <h3 class="eyebrow">Elsewhere</h3>
+              <p>LinkedIn profile placeholder</p>
+            </div>
+          </div>
+        </div>
+        <footer class="footer">
+          <p>Wireframe study · All content is placeholder</p>
+          <a href="#home">Back to top ↑</a>
+        </footer>
+      </div>
+    </section>
+    <!-- section:about:end -->
+    <!-- page-content:end -->
+  </main>
+  <svg class="interface-symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="placeholder-cross" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0 0 100 100M100 0 0 100" vector-effect="non-scaling-stroke" /></symbol>
+    <symbol id="icon-sound-on" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z M15 8a6 6 0 0 1 0 8 M18 5a10 10 0 0 1 0 14" /></symbol>
+    <symbol id="icon-sound-off" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z M16 9l6 6m0-6-6 6" /></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" /></symbol>
+  </svg>
+  <div class="cursor-layer" aria-hidden="true">
+    <div class="cursor-position">
+      <div class="cursor-disc">
+        <span class="horizon-glint" aria-hidden="true"></span>
+        <span class="cursor-label"></span>
+        <svg class="icon cursor-icon cursor-sound-on"><use href="#icon-sound-on" /></svg>
+        <svg class="icon cursor-icon cursor-sound-off"><use href="#icon-sound-off" /></svg>
+        <svg class="icon cursor-icon cursor-plus"><use href="#icon-plus" /></svg>
+      </div>
+    </div>
+  </div>
+  <script src="/navigation.js" type="module"></script>
+</body>
+</html>

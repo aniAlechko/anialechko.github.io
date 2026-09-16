@@ -47,6 +47,9 @@ export function initPage() {
   let lightBounds = lightSection?.getBoundingClientRect();
   let geometryDirty = true;
   let resizeDirty = false;
+  let layoutDirty = false;
+  let viewportWidth = innerWidth;
+  let fabricWidth = 0, fabricHeight = 0, fabricScale = 0;
   let gridColumns = 0;
   let dots = [];
 
@@ -54,11 +57,11 @@ export function initPage() {
   const feedHeading = document.querySelector('.feed-heading');
   const feedLetters = [...(feedHeading?.children || [])];
   const fittedTitles = [...document.querySelectorAll('.section-title')].map(element => {
-    const text = element;
     const range = document.createRange();
-    range.selectNodeContents(text);
-    return { element, text, range, signature: '' };
+    range.selectNodeContents(element);
+    return { element, range, signature: '' };
   });
+  const gravityTextRange = document.createRange();
   const revealItems = [...document.querySelectorAll(
     '.work .section-title, .feed-item, .feed-detail-media, .feed-detail-copy, .about .section-title, .portrait, .bio, .contact-copy'
   )].map(element => ({ element, media: element.matches('.placeholder'), top: 0, progress: 1 }));
@@ -87,6 +90,7 @@ export function initPage() {
   function setMenuOpen(open, restoreFocus = false) {
     menuOpen = open && menuViewport.matches;
     siteHeader.classList.toggle('menu-open', menuOpen);
+    root.classList.toggle('navigation-open', menuOpen);
     menuToggle.setAttribute('aria-expanded', String(menuOpen));
     menuToggle.setAttribute('aria-label', menuOpen ? 'Close navigation' : 'Open navigation');
     if (restoreFocus) menuToggle.focus({ preventScroll: true });
@@ -109,18 +113,7 @@ export function initPage() {
     if (menuOpen && event.relatedTarget && !siteHeader.contains(event.relatedTarget)) setMenuOpen(false);
   });
   on(navigation, 'click', event => {
-    const link = event.target.closest('a');
-    if (!link || !menuOpen) return;
-    setMenuOpen(false);
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    const destination = new URL(link.href);
-    if (destination.pathname !== location.pathname) return;
-    const section = document.getElementById(destination.hash.slice(1));
-    if (!section) return;
-    const hadTabIndex = section.hasAttribute('tabindex');
-    if (!hadTabIndex) section.setAttribute('tabindex', '-1');
-    section.focus({ preventScroll: true });
-    if (!hadTabIndex) on(section, 'blur', () => section.removeAttribute('tabindex'), { once: true });
+    if (menuOpen && event.target.closest('a')) setMenuOpen(false);
   });
   on(menuViewport, 'change', () => {
     const focused = document.activeElement;
@@ -169,10 +162,10 @@ export function initPage() {
       const width = parseFloat(style.width) - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
       const currentSize = parseFloat(style.fontSize);
       const tracking = (parseFloat(style.letterSpacing) || 0) / currentSize;
-      const signature = [width, item.text.textContent, style.fontFamily, style.fontWeight,
+      const signature = [width, item.element.textContent, style.fontFamily, style.fontWeight,
         style.fontVariationSettings, tracking.toFixed(5)].join('|');
       if (!width || item.signature === signature) continue;
-      item.range.selectNodeContents(item.text);
+      item.range.selectNodeContents(item.element);
       // Range includes glyph sidebearings and the final letter-spacing advance.
       const textWidth = item.range.getBoundingClientRect().width;
       if (!textWidth) continue;
@@ -263,7 +256,6 @@ export function initPage() {
     fabricBounds = canvas.getBoundingClientRect();
     lightBounds = lightSection?.getBoundingClientRect();
     const masses = [];
-    const textRange = document.createRange();
     for (const element of gravityElements) {
       const isPanel = element.matches('.placeholder');
       const isBox = isPanel || element.matches('.resume-placeholder');
@@ -278,8 +270,8 @@ export function initPage() {
         let textNode, left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
         while ((textNode = walker.nextNode())) {
           if (!textNode.textContent.trim()) continue;
-          textRange.selectNodeContents(textNode);
-          for (const line of textRange.getClientRects()) {
+          gravityTextRange.selectNodeContents(textNode);
+          for (const line of gravityTextRange.getClientRects()) {
             if (!line.width || !line.height) continue;
             left = Math.min(left, line.left);
             top = Math.min(top, line.top);
@@ -318,15 +310,24 @@ export function initPage() {
     geometryDirty = false;
   }
 
-  function resizeFabric() {
+  function measureLayout() {
     fitDisplayTitles();
     measureMotion();
-    updateMotion(0, true);
+    geometryDirty = true;
+  }
+
+  function resizeFabric() {
     if (!context) return;
     fabricBounds = canvas.getBoundingClientRect();
     const scale = Math.min(devicePixelRatio || 1, 2);
-    canvas.width = Math.round(fabricBounds.width * scale);
-    canvas.height = Math.round(fabricBounds.height * scale);
+    if (fabricBounds.width === fabricWidth && fabricBounds.height === fabricHeight && scale === fabricScale) return;
+    fabricWidth = fabricBounds.width;
+    fabricHeight = fabricBounds.height;
+    fabricScale = scale;
+    const pixelWidth = Math.round(fabricWidth * scale);
+    const pixelHeight = Math.round(fabricHeight * scale);
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     context.setTransform(scale, 0, 0, scale, 0, 0);
     dots = [];
     const start = spacing / 2 - spacing * 2;
@@ -338,9 +339,7 @@ export function initPage() {
         dots.push({ x: px, y: py, baseDepth: 0, baseGX: 0, baseGY: 0 });
       }
     }
-    measureFabric();
-    drawFabric(0);
-    wake();
+    geometryDirty = true;
   }
 
   function drawFabric(elapsed) {
@@ -477,6 +476,7 @@ export function initPage() {
 
   function animate(time) {
     if (disposed) return;
+    if (layoutDirty) { layoutDirty = false; measureLayout(); }
     if (resizeDirty) { resizeDirty = false; resizeFabric(); }
     const elapsed = previousTime ? Math.min(time - previousTime, 64) : 16;
     previousTime = time;
@@ -540,7 +540,16 @@ export function initPage() {
     geometryDirty = true;
     wake();
   }, { passive: true });
-  on(window, 'resize', () => { resizeDirty = true; hide(); });
+  on(window, 'resize', () => {
+    // Mobile browser controls change height during scroll without changing layout width.
+    if (innerWidth !== viewportWidth) {
+      viewportWidth = innerWidth;
+      layoutDirty = true;
+    }
+    resizeDirty = true;
+    geometryDirty = true;
+    hide();
+  });
   on(window, 'blur', hide);
   on(document.documentElement, 'pointerleave', hide);
   on(document, 'pointercancel', hide);
@@ -583,6 +592,7 @@ export function initPage() {
   on(heroVideo, 'error', syncHeroSound);
   // Initialise the optional hero, then the shared effects on every route.
   if (heroVideo && heroSound) syncHeroSound();
+  measureLayout();
   syncMotionPreference();
   const discObserver = new ResizeObserver(([entry]) => {
     if (disposed) return;
@@ -591,15 +601,28 @@ export function initPage() {
     wake();
   });
   discObserver.observe(disc, { box: 'border-box' });
-  const layoutObserver = new ResizeObserver(() => { resizeDirty = true; wake(); });
+  let observedWidth, observedHeight;
+  const layoutObserver = new ResizeObserver(([entry]) => {
+    const { width, height } = entry.contentRect;
+    if (width === observedWidth && height === observedHeight) return;
+    observedWidth = width;
+    observedHeight = height;
+    // Content changes still need fresh geometry, independently of viewport height.
+    layoutDirty = true;
+    resizeDirty = true;
+    wake();
+  });
   layoutObserver.observe(root);
   document.fonts.ready.then(() => {
     if (disposed) return;
     for (const title of fittedTitles) title.signature = '';
-    resizeDirty = true;
+    layoutDirty = true;
     wake();
   });
   resizeFabric();
+  measureFabric();
+  drawFabric(0);
+  wake();
   return () => {
     disposed = true;
     listeners.abort();
@@ -607,6 +630,6 @@ export function initPage() {
     layoutObserver.disconnect();
     cancelAnimationFrame(frame);
     heroVideo?.pause();
-    root.classList.remove('has-custom-cursor', 'menu-ready', 'motion-ready');
+    root.classList.remove('has-custom-cursor', 'menu-ready', 'motion-ready', 'navigation-open');
   };
 }

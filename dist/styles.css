@@ -1198,6 +1198,14 @@ body[data-page="about"] .about {
 
 /* Narrow layout: six tracks, with the reel first and both texts below it. */
 @media (width < 1024px) {
+  .space-fabric {
+    /* Browser toolbar changes must not stretch or rebuild the background. */
+    bottom: auto;
+    height: 100lvh;
+  }
+  html.navigation-open {
+    overflow: hidden;
+  }
   .menu-ready .menu-toggle {
     display: block;
     margin-right: -12px;
@@ -1209,6 +1217,7 @@ body[data-page="about"] .about {
     min-height: 0;
     max-height: calc(100svh - var(--header-height));
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 0 var(--page-gutter) 16px;
     background: var(--color-bg);
     color: var(--color-text);

@@ -132,13 +132,6 @@ export function initPage() {
     duplicate.setAttribute('aria-hidden', 'true');
     logos.parentElement.append(duplicate);
     companyMarquee.classList.add('is-ready');
-    const motionButton = companyMarquee.querySelector('.company-motion');
-    motionButton.hidden = false;
-    on(motionButton, 'click', () => {
-      const paused = companyMarquee.classList.toggle('is-paused');
-      motionButton.setAttribute('aria-pressed', String(paused));
-      motionButton.setAttribute('aria-label', paused ? 'Play company logos' : 'Pause company logos');
-    });
   }
 
   // Scroll reveals.

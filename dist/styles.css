@@ -431,44 +431,6 @@ body[data-page="home"] .site-brand {
 .company-marquee.is-ready .company-logos {
   animation: company-scroll var(--logo-cycle) linear infinite;
 }
-.company-marquee.is-paused .company-logos {
-  animation-play-state: paused;
-}
-.company-motion {
-  position: absolute;
-  top: 0;
-  right: 0;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 8px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--color-bg);
-  color: inherit;
-  cursor: pointer;
-}
-.company-motion[hidden], .ticker-play {
-  display: none;
-}
-.company-motion svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-}
-.company-motion[aria-pressed="true"] .ticker-pause {
-  display: none;
-}
-.company-motion[aria-pressed="true"] .ticker-play {
-  display: block;
-}
-@media (hover: hover) and (pointer: fine) {
-  .company-motion { opacity: 0; }
-  .company-marquee:hover .company-motion, .company-motion:focus-visible { opacity: 1; }
-}
 @keyframes company-scroll {
   to { transform: translateX(-100%); }
 }
@@ -1168,7 +1130,7 @@ body[data-page="about"] .about {
   .company-window {
     mask-image: none;
   }
-  .company-logos[aria-hidden="true"], .company-motion {
+  .company-logos[aria-hidden="true"] {
     display: none;
   }
   html {

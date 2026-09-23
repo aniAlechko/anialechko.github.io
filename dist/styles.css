@@ -1070,7 +1070,7 @@ body[data-page="about"] .about {
   .has-custom-cursor .cursor-disc::before, .has-custom-cursor .cursor-disc::after, .has-custom-cursor .horizon-glint {
     animation-play-state: running;
   }
-  .has-custom-cursor .hero-sound:not(:focus-visible) .control-icon, .has-custom-cursor .feed-open:not(:focus-visible) .control-icon {
+  .has-custom-cursor .hero-sound:not(:focus-visible) .control-icon {
     opacity: 0;
   }
 }

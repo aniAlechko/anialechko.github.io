@@ -696,13 +696,6 @@ body[data-page="about"] .about {
   min-height: calc(100svh - var(--header-height));
 }
 
-.footer.page-footer {
-  margin-top: 0;
-  margin-bottom: 32px;
-  border-color: var(--color-border);
-  color: var(--color-muted);
-}
-
 /* Heading placement remains on the grid; all section titles share their size. */
 .work .section-title {
   grid-column: 4 / -1;
@@ -828,7 +821,7 @@ body[data-page="about"] .about {
   min-width: 0;
 }
 
-/* About and footer */
+/* About */
 .about {
   --color-heading: var(--color-text-dark);
   background: var(--color-bg-light);
@@ -893,23 +886,6 @@ body[data-page="about"] .about {
   font-size: 11px;
   text-transform: uppercase;
   color: var(--color-muted-dark);
-}
-
-.footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  margin-top: 96px;
-  padding-top: 24px;
-  border-top: 1px solid #c7c7c7;
-  color: var(--color-muted-dark);
-  font-size: 11px;
-}
-
-.footer a {
-  flex-shrink: 0;
-  padding-block: 12px;
 }
 
 /* Decorative cursor follower */
@@ -1326,10 +1302,5 @@ body[data-page="about"] .about {
   }
   .contact-copy p {
     margin-bottom: 0;
-  }
-  .footer {
-    margin-top: 48px;
-    line-height: 1.6;
-    align-items: flex-start;
   }
 }

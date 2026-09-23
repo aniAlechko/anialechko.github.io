@@ -41,7 +41,7 @@ export function initPage() {
   const lightSection = document.querySelector('.about');
   const context = canvas.getContext('2d');
   const gravityElements = document.querySelectorAll(
-    '.placeholder, h1, h2:not(.feed-heading), .feed-heading > span, h3, main p, .navigation a, .resume-placeholder, .footer a'
+    '.placeholder, h1, h2:not(.feed-heading), .feed-heading > span, h3, main p, .navigation a, .resume-placeholder'
   );
   let fabricBounds = canvas.getBoundingClientRect();
   let lightBounds = lightSection?.getBoundingClientRect();
@@ -261,7 +261,7 @@ export function initPage() {
       const isBox = isPanel || element.matches('.resume-placeholder');
       const isFeedLetter = element.matches('.feed-heading > span');
       const isHeading = isFeedLetter || element.matches('h1, h2');
-      const isSmall = element.matches('h3, a, .footer p, .resume-placeholder');
+      const isSmall = element.matches('h3, a, .resume-placeholder');
       let rect;
       if (isBox) rect = element.getBoundingClientRect();
       else {

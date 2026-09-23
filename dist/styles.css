@@ -817,8 +817,30 @@ body[data-page="about"] .about {
 }
 
 .feed-item {
+  position: relative;
   aspect-ratio: 4 / 5;
   min-width: 0;
+}
+
+.feed-open {
+  width: auto;
+  height: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.feed-open:hover {
+  text-decoration: none;
+}
+
+/* Expand the media without moving the card's grid slot or scroll reveal. */
+@media (hover: hover) and (pointer: fine) {
+  .feed-open {
+    transition: inset 400ms cubic-bezier(0.22, 1.12, 0.36, 1);
+  }
+  .feed-open:hover, .feed-open:focus-visible {
+    inset: -16px -13px;
+  }
 }
 
 /* About */
@@ -1152,7 +1174,7 @@ body[data-page="about"] .about {
   html {
     scroll-behavior: auto;
   }
-  .cursor-disc, .cursor-label, .cursor-icon, .control-icon {
+  .cursor-disc, .cursor-label, .cursor-icon, .control-icon, .feed-open {
     transition: none;
   }
   .cursor-disc::before, .cursor-disc::after, .horizon-glint {

@@ -64,7 +64,7 @@ export function initPage() {
   const gravityTextRange = document.createRange();
   const revealItems = [...document.querySelectorAll(
     '.work .section-title, .feed-item, .feed-detail-media, .feed-detail-copy, .about .section-title, .portrait, .bio, .contact-copy'
-  )].map(element => ({ element, media: element.matches('.placeholder'), top: 0, progress: 1 }));
+  )].map(element => ({ element, media: element.matches('.placeholder, .feed-item'), top: 0, progress: 1 }));
   const textReveals = [...document.querySelectorAll('.feed-intro p')].map(element => {
     const copy = element.textContent;
     const words = copy.trim().split(/\s+/).map(word => {

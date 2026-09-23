@@ -47,16 +47,12 @@ export async function renderPage(pathname) {
     }
     title = `${page[0].toUpperCase()}${page.slice(1)} — Alex Rivkin`;
   }
-  let html = source
+  const html = source
     .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
     .replace('data-page="home"', `data-page="${page}"`)
     .replace(/<!-- page-content:start -->[\s\S]*?<!-- page-content:end -->/, () => pageContent)
     .replace('href="#work">Skip to work', `href="#${skipTarget}">Skip to content`)
     .replace(' aria-current="page"', '')
     .replace(`<a href="/${activePage}">`, `<a href="/${activePage}" aria-current="page">`);
-  if (page !== 'about') {
-    const footer = /<footer class="footer">[\s\S]*?<\/footer>/.exec(source)?.[0];
-    if (footer) html = html.replace('</main>', `</main>\n  ${footer.replace('class="footer"', 'class="page-footer footer shell"')}`);
-  }
   return html;
 }

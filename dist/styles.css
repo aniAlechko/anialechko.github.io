@@ -55,6 +55,7 @@
   --text-feature: clamp(20px, 1.85vw, 28px);
   --text-body: 21px;
   --text-nav: 14px;
+  --nav-line-height: 20px;
   --text-menu: 28px;
 
   /* Shared grid and independent spacing decisions. */
@@ -64,8 +65,8 @@
   --grid-gap: 32px;
   --row-gap: 64px;
   --section-gap: 128px;
-  --header-height: 66px;
-  --navigation-gap: 44px;
+  --header-height: 68px;
+  --navigation-gap: 48px;
   --hero-top-gap: 64px;
   --hero-row-gap: var(--row-gap);
   --hero-logos-gap: 32px;
@@ -85,8 +86,17 @@
 }
 
 /* Responsive controls live together; layout rules are at the end of the file. */
+@media (min-width: 1440px) {
+  :root {
+    --text-nav: 16px;
+    --nav-line-height: 24px;
+    --header-height: 72px;
+  }
+}
+
 @media (width < 1024px) {
   :root {
+    --header-height: 66px;
     --page-gutter: 16px;
     --grid-columns: 6;
     --grid-gap: 24px;
@@ -224,21 +234,26 @@ body[data-page="home"] .site-brand {
   gap: var(--navigation-gap);
 }
 
+@media (min-width: 1024px) {
+  .navigation {
+    min-width: calc((100% - 2 * var(--navigation-gap)) / 3);
+    justify-content: space-between;
+  }
+}
+
 .navigation a {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
   font-size: var(--text-nav);
   font-weight: var(--weight-nav);
-  line-height: 20px;
+  line-height: var(--nav-line-height);
   letter-spacing: -0.3px;
   text-transform: uppercase;
 }
 
-.navigation a[aria-current="page"] {
-  text-decoration: underline;
-  text-underline-offset: 5px;
-  text-decoration-thickness: 1px;
+.navigation a:hover, .navigation a[aria-current="page"], .site-brand:hover {
+  text-decoration: none;
 }
 
 .menu-toggle {

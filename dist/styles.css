@@ -171,7 +171,7 @@ button {
 }
 
 /* Every section uses the same tracks, including the deliberately empty ones. */
-.hero, .work, .feed-header, .feed-row, .about-grid {
+.hero, .work, .feed-header, .about-grid {
   display: grid;
   grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
   column-gap: var(--grid-gap);
@@ -702,6 +702,40 @@ body[data-page="about"] .about {
   margin-top: 10px;
 }
 
+.project-case-study {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-heading);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.3px;
+  text-transform: uppercase;
+}
+
+.project-case-study svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+@media (min-width: 1440px) {
+  .project-case-study {
+    font-size: 16px;
+    line-height: 24px;
+  }
+}
+
 .project-secondary {
   grid-column: 1 / 7;
 }
@@ -751,31 +785,21 @@ body[data-page="about"] .about {
 
 .feed-gallery {
   display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  align-items: start;
   gap: var(--grid-gap);
 }
 
-.feed-row {
-  align-items: start;
-}
-
-.feed-item:nth-child(1) {
+.feed-item:nth-child(6n + 1), .feed-item:nth-child(6n + 6) {
   grid-column: span 2;
 }
 
-.feed-item:nth-child(2) {
+.feed-item:nth-child(6n + 2), .feed-item:nth-child(6n + 5) {
   grid-column: span 3;
 }
 
-.feed-item:nth-child(3) {
+.feed-item:nth-child(6n + 3), .feed-item:nth-child(6n + 4) {
   grid-column: span 4;
-}
-
-.feed-row:nth-child(even) .feed-item:nth-child(1) {
-  grid-column: span 4;
-}
-
-.feed-row:nth-child(even) .feed-item:nth-child(3) {
-  grid-column: span 2;
 }
 
 .feed-item {
@@ -1224,8 +1248,15 @@ body[data-page="about"] .about {
   .section-title {
     font-size: var(--fit-font-size, var(--text-section));
   }
-  .feed-row:nth-child(n) .feed-item:nth-child(n) {
+  .feed-gallery {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .feed-item:nth-child(4n + 1), .feed-item:nth-child(4n + 4) {
     grid-column: span 2;
+  }
+  .feed-item:nth-child(4n + 2), .feed-item:nth-child(4n + 3) {
+    grid-column: span 3;
   }
   .about-grid .portrait {
     grid-column: 1 / 5;
@@ -1245,12 +1276,6 @@ body[data-page="about"] .about {
   }
   .project-visual {
     aspect-ratio: 4 / 3;
-  }
-  .feed-gallery, .feed-row {
-    row-gap: 24px;
-  }
-  .feed-row:nth-child(n) .feed-item:nth-child(n) {
-    grid-column: 1 / -1;
   }
   .feed-detail {
     padding-block: 40px 88px;

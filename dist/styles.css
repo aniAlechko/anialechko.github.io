@@ -524,29 +524,31 @@ body[data-page="home"] .site-brand {
 
 .control-icon {
   position: absolute;
-  bottom: 12px;
-  right: 12px;
-  width: 44px;
-  height: 44px;
+  bottom: 16px;
+  right: 16px;
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
-  border: 1px solid #777;
-  border-radius: 50%;
-  background: var(--color-bg);
   transition: opacity 120ms ease;
 }
 
 .control-icon .icon {
   grid-area: 1 / 1;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
-.hero-sound .sound-off, .hero-sound[data-muted="false"] .sound-on {
+.control-icon .icon, .cursor-sound-on, .cursor-sound-off {
+  fill: currentColor;
+  stroke: none;
+}
+
+.hero-sound .sound-on, .hero-sound[data-muted="false"] .sound-off {
   display: none;
 }
 
-.hero-sound[data-muted="false"] .sound-off {
+.hero-sound[data-muted="false"] .sound-on {
   display: block;
 }
 
@@ -1091,7 +1093,7 @@ body[data-page="about"] .about {
   .has-custom-cursor .cursor-disc::before, .has-custom-cursor .cursor-disc::after, .has-custom-cursor .horizon-glint {
     animation-play-state: running;
   }
-  .has-custom-cursor .hero-sound:not(:focus-visible) .control-icon {
+  .has-custom-cursor .hero-sound:hover:not(:focus-visible) .control-icon {
     opacity: 0;
   }
 }

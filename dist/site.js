@@ -557,7 +557,7 @@ export function initPage() {
   on(mouseMode, 'change', hide);
   on(reducedMotion, 'change', () => { syncMotionPreference(); resetHorizon(); resetFabric(); wake(); });
 
-  // The icon represents the next action; video.muted is the single source of truth.
+  // The corner icon shows the current state; the pointer icon shows the next action.
   function syncHeroSound() {
     const ready = heroVideo.readyState >= 2;
     heroVideo.hidden = !ready;

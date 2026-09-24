@@ -10,7 +10,7 @@ let pendingLoad;
 let transition;
 let restoringIndex = null;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const routes = /^\/(?:work\/?|feed\/?|about\/?|feed\/feed-image-0[1-6]\/?|index\.html)?$/;
+const routes = /^\/(?:work\/?|work\/project-(?:one|two)\/?|feed\/?|about\/?|feed\/feed-image-0[1-6]\/?|index\.html)?$/;
 const positions = new Map();
 
 history.scrollRestoration = 'manual';

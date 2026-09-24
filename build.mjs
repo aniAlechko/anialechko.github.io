@@ -56,7 +56,7 @@ try {
 await mkdir(outputRoot, { recursive: true });
 
 for (const entry of entries) {
-  if (entry.name === 'index.html' || entry.name === 'feed-item.html') continue;
+  if (['index.html', 'feed-item.html', 'work-item.html'].includes(entry.name)) continue;
   await cp(resolve(sourceRoot, entry.name), resolve(outputRoot, entry.name), { recursive: true });
 }
 for (const asset of assets.filter(asset => asset.name.endsWith('.js'))) {

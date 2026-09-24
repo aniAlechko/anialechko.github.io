@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 const sourceRoot = new URL('./dist/', import.meta.url);
 export const pageRoutes = Object.freeze([
-  '/', '/work', '/feed', '/about',
+  '/', '/work', '/feed', '/about', '/work/project-one', '/work/project-two',
   ...Array.from({ length: 6 }, (_, index) => `/feed/feed-image-${String(index + 1).padStart(2, '0')}`)
 ]);
 
@@ -22,9 +22,10 @@ export async function renderPage(pathname) {
   if (route === '/') return source;
 
   const feedNumber = route.startsWith('/feed/feed-image-') ? route.slice(-2) : null;
-  const page = feedNumber ? 'feed-detail' : route.slice(1);
-  const activePage = feedNumber ? 'feed' : page;
-  const skipTarget = feedNumber ? 'feed-item' : page;
+  const workName = route.startsWith('/work/project-') ? route.split('-').at(-1) : null;
+  const page = feedNumber ? 'feed-detail' : workName ? 'work-detail' : route.slice(1);
+  const activePage = feedNumber ? 'feed' : workName ? 'work' : page;
+  const skipTarget = feedNumber ? 'feed-item' : workName ? 'work-item' : page;
   let pageContent, title;
   if (feedNumber) {
     const current = Number(feedNumber);
@@ -36,6 +37,11 @@ export async function renderPage(pathname) {
     const template = await readFile(new URL('feed-item.html', sourceRoot), 'utf8');
     pageContent = template.replace(/\{\{(current|previous|next)\}\}/g, (_, key) => entries[key]);
     title = `Feed image ${entries.current} — Alex Rivkin`;
+  } else if (workName) {
+    const entries = { title: `Project ${workName}`, number: workName === 'one' ? '01' : '02' };
+    const template = await readFile(new URL('work-item.html', sourceRoot), 'utf8');
+    pageContent = template.replace(/\{\{(title|number)\}\}/g, (_, key) => entries[key]);
+    title = `${entries.title} — Alex Rivkin`;
   } else {
     // Explicit markers keep overview sections and standalone pages in sync.
     const section = new RegExp(`<!-- section:${page}:start -->([\\s\\S]*?)<!-- section:${page}:end -->`).exec(source);

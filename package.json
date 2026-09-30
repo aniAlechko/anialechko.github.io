@@ -1,0 +1,12 @@
+{
+  "name": "alex-rivkin-portfolio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "build": "node build.mjs",
+    "check": "node --check server.mjs && node --check render.mjs && node --check build.mjs && node --check dist/construction-background.js && node --check dist/construction-entry.js"
+  }
+}

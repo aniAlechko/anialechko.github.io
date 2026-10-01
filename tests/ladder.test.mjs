@@ -21,7 +21,7 @@ function deferred() {
 }
 
 function makeHarness({ pendingImages = false, pendingLayout = false, largeViewportHeight = 840,
-  initialScroll = 0, runPageStart = false } = {}) {
+  initialScroll = 0, runPageStart = false, skillsHeight = null, skillsTop = -24 } = {}) {
   let now = 0;
   let nextId = 1;
   const timers = new Map();
@@ -32,6 +32,7 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
   const animationCalls = [];
   const layouts = [];
   const warnings = [];
+  const resizeObservers = new Set();
   const viewport = { width: 390, height: 780, stableHeight: 780, largeViewportHeight };
   const documentElement = { clientWidth: viewport.width };
   const setTimer = (fn, delay = 0) => {
@@ -76,6 +77,8 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
   const scene = element('scene');
   const actor = element('actor');
   const spacer = element('spacer');
+  const skills = skillsHeight === null ? null : element('skills');
+  spacer.querySelector = selector => selector === '.descent-skills' ? skills : null;
   const site = element('site');
   const strip = element('strip');
   const turn = element('turn');
@@ -119,6 +122,12 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
   documentElement.classList = classes();
   hero.getBoundingClientRect = () => ({ left: 0, top: -window.scrollY,
     width: viewport.width, height: viewport.stableHeight });
+  spacer.getBoundingClientRect = () => ({ left: 0, top: viewport.stableHeight - window.scrollY,
+    width: viewport.width, height: Number.parseFloat(spacer.style.height || '0') });
+  if (skills) skills.getBoundingClientRect = () => ({ left: 0,
+    top: viewport.stableHeight - window.scrollY + skillsTop,
+    bottom: viewport.stableHeight - window.scrollY + skillsTop + skillsHeight,
+    width: 110, height: skillsHeight });
   original.getBoundingClientRect = () => ({ left: viewport.width / 2 - 55,
     top: (viewport.width > 600 ? 140 : 330) - window.scrollY,
     width: 110, height: viewport.width > 600 ? 180 : 220 });
@@ -135,6 +144,11 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     matchMedia,
     getComputedStyle: item => ({ transform: item.style.transform || 'none' }),
     DOMMatrixReadOnly: class { constructor() { this.m42 = 0; } },
+    ResizeObserver: class {
+      constructor(callback) { this.callback = callback; resizeObservers.add(this); }
+      observe(target) { this.target = target; }
+      disconnect() { resizeObservers.delete(this); }
+    },
     requestAnimationFrame(fn) { const id = nextId++; frames.set(id, fn); return id; },
     cancelAnimationFrame: id => frames.delete(id),
     setTimeout: setTimer, clearTimeout: id => timers.delete(id),
@@ -186,10 +200,18 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     emit('resize');
     await tick();
   }
-  return { ready, tick, scrollTo, resize, scene, actor, hero, strip, spacer, poses, layouts,
+  return { ready, tick, scrollTo, resize, scene, actor, hero, strip, spacer, site, poses, layouts,
     animationCalls, window, cleanup,
     maxScroll: () => documentElement.scrollHeight - window.innerHeight,
+    contactStart: () => viewport.stableHeight + Number.parseFloat(spacer.style.height || '0'),
     route: () => layouts.filter(Boolean).at(-1),
+    resizeSkills: async height => {
+      skillsHeight = height;
+      for (const observer of resizeObservers) {
+        if (observer.target === skills) observer.callback();
+      }
+      await tick();
+    },
     finishImages: async () => { decoded.resolve(); await flushMicrotasks(); await tick(); },
     finishLayout: async () => { layoutReady.resolve(); await flushMicrotasks(); await tick(); },
   };
@@ -379,6 +401,97 @@ const tests = [
     assert.equal(h.spacer.style.height, reservedHeight, 'Decoded assets inserted a new route');
     assert.equal(h.window.scrollY, total, 'Initialization changed the current scroll position');
     assert.equal(h.scene.dataset.state, 'landed');
+    assert.equal(h.actor.dataset.pose, 'front');
+    h.cleanup();
+  }],
+  ['a long skills list extends the route and preserves the endpoint handoffs', async () => {
+    const baseline = makeHarness();
+    await baseline.ready();
+    const originalTotal = baseline.route().total;
+    baseline.cleanup();
+    const h = makeHarness({ skillsHeight: 700, skillsTop: -24 });
+    await h.ready();
+    const clearance = 700 - 24 + 48;
+    const reserved = Number.parseFloat(h.spacer.style.height);
+    assert.ok(reserved >= clearance, 'Landing covers the end of the skills list');
+    assert.ok(reserved < clearance + h.route().pitch,
+      'The skills route adds more than one spare rung');
+    assert.ok(h.route().total > originalTotal, 'The longer list did not extend the route');
+    await h.scrollTo(h.route().total);
+    await h.tick(200);
+    assert.equal(h.scene.dataset.state, 'landed');
+    assert.equal(h.actor.dataset.pose, 'front');
+    const route = h.route();
+    const builds = h.strip.replacements;
+    await h.resize(390, 840);
+    assert.equal(h.route(), route, 'Toolbar growth rebuilt the long route');
+    assert.equal(h.strip.replacements, builds);
+    assert.equal(h.scene.dataset.state, 'landed');
+    await h.scrollTo(0);
+    await h.tick(200);
+    assert.equal(h.scene.hidden, true, 'The extended route did not return to the hero');
+    assert.equal(h.hero.classList.contains('descent-active'), false);
+    assert.equal(h.actor.dataset.pose, 'front');
+    h.cleanup();
+  }],
+  ['skills wrapping or font changes resize the route without a viewport change', async () => {
+    const h = makeHarness({ skillsHeight: 700, skillsTop: -24 });
+    await h.ready();
+    const originalTotal = h.route().total;
+    await h.resizeSkills(960);
+    assert.ok(h.route().total > originalTotal, 'Changed skills height retained the old route');
+    assert.ok(Number.parseFloat(h.spacer.style.height) >= 960 - 24 + 48,
+      'The updated list overlaps the landing');
+    const builds = h.strip.replacements;
+    await h.resizeSkills(960);
+    assert.equal(h.strip.replacements, builds, 'Unchanged list size rebuilt the route');
+    await h.scrollTo(h.route().total);
+    await h.tick(200);
+    assert.equal(h.scene.dataset.state, 'landed');
+    assert.equal(h.actor.dataset.pose, 'front');
+    h.cleanup();
+  }],
+  ['the avatar stays above compact contact and resumes climbing on return', async () => {
+    const h = makeHarness({ skillsHeight: 960, skillsTop: -24 });
+    await landed(h);
+    const route = h.route();
+    const contactStart = h.contactStart();
+    const parkedTop = Number.parseFloat(h.actor.style.top);
+    const avatarHeight = 1249 * Number.parseFloat(h.scene.style['--sprite-unit']);
+    const minimumContactStart = Math.max(h.hero.getBoundingClientRect().height + 960 - 24 + 48,
+      h.window.innerHeight * 1.3);
+    const turns = h.animationCalls.length;
+    const builds = h.strip.replacements;
+    assert.ok(contactStart > route.total, 'Contact starts before the final climb settles');
+    assert.ok(Math.abs(contactStart - parkedTop - avatarHeight - 32) < 0.01,
+      'The avatar is not fully parked above the contact section');
+    assert.ok(contactStart >= minimumContactStart, 'Contact covers the end of the skills');
+    assert.ok(contactStart < minimumContactStart + route.pitch,
+      'Parking the avatar added empty space before contact');
+    for (const position of [(route.total + contactStart) / 2, contactStart, h.maxScroll()]) {
+      await h.scrollTo(position);
+      await h.tick(200);
+      assert.equal(Number.parseFloat(h.actor.style.top), parkedTop,
+        'Scrolling through contact moved the parked avatar in the document');
+      assert.equal(h.scene.dataset.state, 'landed');
+      assert.equal(h.actor.dataset.pose, 'front');
+    }
+    await h.resize(390, 840);
+    assert.equal(h.contactStart(), contactStart, 'Safari toolbar moved the contact section');
+    assert.equal(h.route(), route, 'Safari toolbar changed the climb endpoint');
+    assert.equal(h.strip.replacements, builds);
+    assert.equal(h.animationCalls.length, turns, 'Contact scrolling replayed the landing');
+    await h.scrollTo(contactStart);
+    assert.ok(Number.parseFloat(h.actor.style.top) + avatarHeight - h.window.scrollY < 0,
+      'Avatar overlaps the viewport when the contact section is fully visible');
+    await h.scrollTo(route.total - route.pitch * 1.5);
+    await h.tick(200);
+    assert.equal(h.scene.dataset.state, 'climbing');
+    assert.ok(['a', 'b'].includes(h.actor.dataset.pose));
+    await h.scrollTo(0);
+    await h.tick(200);
+    assert.equal(h.scene.hidden, true);
+    assert.equal(h.hero.classList.contains('descent-active'), false);
     assert.equal(h.actor.dataset.pose, 'front');
     h.cleanup();
   }],

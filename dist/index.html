@@ -29,7 +29,8 @@
     <a class="email" href="mailto:anialechko@gmail.com" aria-label="Email Alex Rivkin at anialechko@gmail.com"><span class="desktop-label">anialechko@gmail.com</span><span class="mobile-label" aria-hidden="true">Email</span></a>
     <a class="linkedin" href="https://www.linkedin.com/in/anialechko/" target="_blank" rel="noopener noreferrer" aria-label="Alex Rivkin on LinkedIn (opens in a new tab)"><span class="desktop-label">linkedin.com/in/anialechko</span><span class="mobile-label" aria-hidden="true">LinkedIn</span></a>
   </header>
-  <main class="hero" aria-labelledby="page-title" aria-describedby="construction-note">
+  <main aria-labelledby="page-title">
+  <section class="hero" aria-describedby="construction-note">
     <div class="hero-composition">
     <h1 id="page-title" class="hero-name">
       <span class="name-position given-name"><span class="name-word">Alex</span></span>
@@ -62,7 +63,21 @@
       <p class="role">PRODUCT DESIGNER<br />BASED IN TEL AVIV</p>
       <p class="status">UX/UI, MOBILE &amp; WEB<br />INTERACTION DESIGN</p>
     </footer>
+  </section>
+  <div id="descent-space" aria-hidden="true"></div>
+  <div id="construction-site" class="construction-site" aria-hidden="true"></div>
   </main>
+  <div id="descent-scene" class="descent-scene" aria-hidden="true" hidden>
+    <div class="descent-ladder"><div class="descent-ladder-strip"></div></div>
+    <div class="descent-actor">
+      <div class="descent-turn">
+        <img class="descent-image" data-pose="front" src="/images/alex-rivkin-idle.png" width="1024" height="1536" alt="" draggable="false" />
+        <img class="descent-image" data-pose="a" src="/images/alex-rivkin-climb-back-a.png" width="1024" height="1536" alt="" fetchpriority="low" draggable="false" hidden />
+        <img class="descent-image" data-pose="b" src="/images/alex-rivkin-climb-back-b.png" width="1024" height="1536" alt="" fetchpriority="low" draggable="false" hidden />
+      </div>
+    </div>
+    <img class="descent-ladder-probe" src="/images/pixel-construction-ladder.png" width="1024" height="1536" alt="" fetchpriority="low" hidden />
+  </div>
   <script type="module" src="/construction-entry.js"></script>
 </body>
 </html>

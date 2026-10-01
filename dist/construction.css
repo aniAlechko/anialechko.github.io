@@ -31,7 +31,9 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; }
+html { scrollbar-width: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
+body { position: relative; margin: 0; }
 ::selection { color: #000; background: #efee74; }
 a { color: inherit; text-underline-offset: 4px; text-decoration-thickness: 1px; }
 a:focus-visible { outline: 2px solid #efee74; outline-offset: 6px; }
@@ -270,4 +272,77 @@ a:hover { color: #efee74; }
   .js .speech-word { animation: none !important; transform: none; }
   .js .character-pose--idle { opacity: 1 !important; }
   .js .character-pose--jump { opacity: 0 !important; }
+}
+
+/* The ladder shares the page's coordinates, so ordinary scrolling drives the descent. */
+#descent-space { height: 0; pointer-events: none; }
+.construction-site {
+  position: relative;
+  z-index: 1;
+  min-height: var(--landing-height, 100svh);
+  overflow: hidden;
+  background: #000;
+}
+.descent-scene {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.descent-scene[hidden], .descent-image[hidden], .descent-ladder-probe { display: none; }
+.descent-ladder {
+  position: absolute;
+  width: calc(374 * var(--ladder-x-unit));
+  clip-path: inset(0 0 100% 0);
+  opacity: 0;
+  transition: clip-path .45s cubic-bezier(.3, 0, .4, 1), opacity .18s linear;
+}
+.descent-scene.is-active .descent-ladder { clip-path: inset(0); opacity: 1; }
+.descent-scene.is-landed .descent-ladder { opacity: 0; }
+.descent-scene.is-returning .descent-ladder,
+.descent-scene.is-landing .descent-ladder { opacity: 0; transition: opacity .24s ease-out; }
+.descent-ladder-strip { position: relative; }
+.ladder-tile {
+  position: relative;
+  width: calc(374 * var(--ladder-x-unit));
+  height: calc(217 * var(--ladder-y-unit));
+  overflow: hidden;
+}
+.ladder-tile img {
+  position: absolute;
+  display: block;
+  width: calc(1024 * var(--ladder-x-unit));
+  height: calc(1536 * var(--ladder-y-unit));
+  max-width: none;
+  left: calc(-325 * var(--ladder-x-unit));
+  top: calc(-650 * var(--ladder-y-unit));
+  image-rendering: pixelated;
+}
+.descent-actor {
+  position: absolute;
+  width: calc(524 * var(--sprite-unit));
+  height: calc(1249 * var(--sprite-unit));
+}
+.descent-turn { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.descent-image {
+  position: absolute;
+  display: block;
+  width: calc(1024 * var(--sprite-unit));
+  height: calc(1536 * var(--sprite-unit));
+  max-width: none;
+  left: calc(-256 * var(--sprite-unit));
+  top: calc(-167 * var(--sprite-unit));
+  image-rendering: pixelated;
+}
+.descent-image[data-pose="b"] { left: calc(-254 * var(--sprite-unit)); top: calc(-158 * var(--sprite-unit)); }
+.descent-image[data-pose="front"] { top: calc(-234 * var(--sprite-unit)); }
+.descent-scene.is-landed .descent-image[data-pose="front"] { top: calc(-165 * var(--sprite-unit)); }
+.hero.descent-active .construction-character { visibility: hidden; }
+.hero.descent-active .speech { visibility: hidden; }
+.hero.descent-active.return-ready .speech { visibility: visible; }
+
+@media (prefers-reduced-motion: reduce) {
+  .descent-scene { display: none; }
+  .hero.descent-active .construction-character, .hero.descent-active .speech { visibility: visible; }
 }

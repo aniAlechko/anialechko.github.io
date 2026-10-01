@@ -3,17 +3,19 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
 const source = await readFile(new URL('../site/smooth-scroll.js', import.meta.url), 'utf8');
-const route = {
-  pitch: 40,
-  total: 990,
-  segments: [{ start: 0, end: 400 }, { start: 550, end: 990 }],
-};
+const route = { pitch: 40, total: 1000 };
 
-function makeHarness(initialScroll, activeRoute = route) {
+function makeHarness(initialScroll) {
   let now = 0;
   let frameId = 0;
   const frames = new Map();
   const events = new Map();
+  const mediaEvents = new Map();
+  const reducedMotion = {
+    matches: false,
+    addEventListener(type, listener) { mediaEvents.set(type, listener); },
+    removeEventListener(type) { mediaEvents.delete(type); },
+  };
   const page = { scrollHeight: 4000 };
   const window = {
     scrollY: initialScroll,
@@ -27,19 +29,20 @@ function makeHarness(initialScroll, activeRoute = route) {
     document: { documentElement: page, body: {} },
     HTMLElement: class {},
     performance: { now: () => now },
-    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+    matchMedia: () => reducedMotion,
     requestAnimationFrame(callback) { const id = ++frameId; frames.set(id, callback); return id; },
     cancelAnimationFrame: id => frames.delete(id),
   });
   vm.runInContext(source.replace('export function initSmoothScroll', 'function initSmoothScroll'), context);
   const controller = context.initSmoothScroll();
-  controller.setRoute(activeRoute);
-  function wheel(deltaY, deltaMode = 0) {
+  controller.setRoute(route);
+  function wheel(deltaY, deltaMode = 0, overrides = {}) {
     now += 16;
     const event = {
       deltaY, deltaX: 0, deltaMode, cancelable: true, defaultPrevented: false,
       composedPath: () => [],
       preventDefault() { this.defaultPrevented = true; },
+      ...overrides,
     };
     events.get('wheel')(event);
     return { target: controller.getTarget(), prevented: event.defaultPrevented };
@@ -56,72 +59,49 @@ function makeHarness(initialScroll, activeRoute = route) {
     advance(300);
     assert.equal(frames.size, 0, 'Scroll did not settle');
   }
-  return { wheel, advance, finish, window, controller, emit: type => events.get(type)?.({}) };
+  return {
+    wheel, advance, finish, window, controller, events, mediaEvents,
+    emit: (type, event = {}) => events.get(type)?.(event),
+    setReducedMotion(value) {
+      reducedMotion.matches = value;
+      mediaEvents.get('change')?.();
+    },
+  };
 }
 
 const tests = [
-  ['second descent snaps relative to its own first rung in both directions', () => {
-    const forward = makeHarness(550);
-    assert.equal(forward.wheel(40).target, 590);
+  ['wheel input settles on a ladder rung in both directions', () => {
+    const forward = makeHarness(120);
+    assert.equal(forward.wheel(40).target, 160);
     forward.finish();
-    assert.equal(forward.window.scrollY, 590);
-    const reverse = makeHarness(630);
-    assert.equal(reverse.wheel(-40).target, 590);
+    assert.equal(forward.window.scrollY, 160);
+    const reverse = makeHarness(200);
+    assert.equal(reverse.wheel(-40).target, 160);
     reverse.finish();
-    assert.equal(reverse.window.scrollY, 590);
+    assert.equal(reverse.window.scrollY, 160);
   }],
-  ['small line-mode wheel input advances a rung in the second descent', () => {
-    assert.equal(makeHarness(550).wheel(1, 1).target, 590);
-    assert.equal(makeHarness(630).wheel(-1, 1).target, 590);
+  ['small line-mode wheel input advances a rung', () => {
+    assert.equal(makeHarness(120).wheel(1, 1).target, 160);
+    assert.equal(makeHarness(200).wheel(-1, 1).target, 160);
   }],
-  ['the middle interval scrolls without rung snapping', () => {
-    const h = makeHarness(440);
-    const expected = 440 + 40 * (1 + 0.9 * 40 / 700);
-    assert.ok(Math.abs(h.wheel(40).target - expected) < 0.001);
+  ['returning from contact settles on the ladder rung grid', () => {
+    const h = makeHarness(1040);
+    assert.equal(h.wheel(-80).target, 960);
+    assert.equal(h.window.scrollY, 1040, 'Changing the target moved the page directly');
     h.finish();
-    assert.ok(Math.abs(h.window.scrollY - expected) < 0.001);
-  }],
-  ['continued wheel input crosses both sides of the about interval without forced stops', () => {
-    const h = makeHarness(380);
-    const first = h.wheel(120).target;
-    const expected = 380 + 120 * (1 + 0.9 * 120 / 700);
-    assert.ok(Math.abs(first - expected) < 0.001, 'The requested motion was shortened at about arrival');
-    assert.equal(h.window.scrollY, 380, 'Changing the target moved the page directly');
-    h.advance(4);
-    assert.ok(h.window.scrollY > 400 && h.window.scrollY < first, 'The page did not ease through the first boundary');
-    const next = h.wheel(120).target;
-    assert.ok(next > 550, 'Continued input was pinned to the end of the about interval');
-    assert.equal((next - 550) % route.pitch, 0, 'The next descent lost its own rung grid');
-    h.finish();
-    assert.equal(h.window.scrollY, next);
-  }],
-  ['continued reverse input crosses the about interval without forced stops', () => {
-    const h = makeHarness(570);
-    const first = h.wheel(-120).target;
-    const expected = 570 - 120 * (1 + 0.9 * 120 / 700);
-    assert.ok(Math.abs(first - expected) < 0.001, 'Reverse motion was shortened at about arrival');
-    assert.equal(h.window.scrollY, 570);
-    h.advance(4);
-    assert.ok(h.window.scrollY < 550 && h.window.scrollY > first, 'The page did not ease through the reverse boundary');
-    const next = h.wheel(-120).target;
-    assert.ok(next < 400, 'Continued reverse input was pinned to the first descent');
-    assert.equal(next % route.pitch, 0);
-    h.finish();
-    assert.equal(h.window.scrollY, next);
-  }],
-  ['entering either climb from the middle interval uses its own rung grid', () => {
-    assert.equal(makeHarness(530).wheel(40).target, 590);
-    assert.equal(makeHarness(410).wheel(-40).target, 360);
+    assert.equal(h.window.scrollY, 960);
   }],
   ['a wheel target can pass the final arrival directly into contact', () => {
-    const h = makeHarness(970);
+    const h = makeHarness(980);
     const first = h.wheel(120).target;
-    assert.ok(first > 990, 'Contact scrolling was stopped at the final ladder rung');
-    assert.equal(h.window.scrollY, 970);
+    assert.ok(first > route.total, 'Contact scrolling was stopped at the final ladder rung');
+    assert.equal(h.window.scrollY, 980);
     h.advance(4);
+    assert.ok(h.window.scrollY > route.total && h.window.scrollY < first,
+      'The page did not ease through the contact boundary');
     assert.ok(h.wheel(120).target > first);
     h.finish();
-    assert.ok(h.window.scrollY > 990);
+    assert.ok(h.window.scrollY > route.total);
   }],
   ['a strong burst settles within 640ms after the last wheel input', () => {
     const h = makeHarness(40);
@@ -151,13 +131,23 @@ const tests = [
     h.finish();
     assert.ok(h.window.scrollY < 380);
   }],
-  ['legacy routes retain their original rung grid and uncapped exit', () => {
-    const legacy = { pitch: 40, total: 400 };
-    assert.equal(makeHarness(120, legacy).wheel(40).target, 160);
-    assert.ok(makeHarness(380, legacy).wheel(120).target > legacy.total);
-    const outside = makeHarness(440, legacy);
-    const expected = 440 + 40 * (1 + 0.9 * 40 / 700);
-    assert.ok(Math.abs(outside.wheel(40).target - expected) < 0.001);
+  ['the page boundaries stop scrolling without trapping wheel input', () => {
+    const top = makeHarness(20);
+    assert.equal(top.wheel(-120).target, 0);
+    top.finish();
+    assert.deepEqual(top.wheel(-120), { target: null, prevented: false });
+    const bottom = makeHarness(3190);
+    assert.equal(bottom.wheel(120).target, 3200);
+    bottom.finish();
+    assert.deepEqual(bottom.wheel(120), { target: null, prevented: false });
+  }],
+  ['removing the ladder route leaves ordinary contact scrolling usable', () => {
+    const h = makeHarness(120);
+    h.controller.setRoute(null);
+    const destination = h.wheel(700).target;
+    assert.equal(destination, 120 + h.window.innerHeight * 0.4);
+    h.finish();
+    assert.equal(h.window.scrollY, destination);
   }],
   ['continuous touchpad input remains native and cancels a wheel animation', () => {
     const h = makeHarness(380);
@@ -168,12 +158,51 @@ const tests = [
     assert.equal(h.window.scrollY, 380);
   }],
   ['touch input stops the wheel animation without moving the page', () => {
-    const h = makeHarness(570);
+    const h = makeHarness(560);
     h.wheel(120);
     h.emit('touchstart');
     assert.equal(h.controller.getTarget(), null);
     h.finish();
-    assert.equal(h.window.scrollY, 570);
+    assert.equal(h.window.scrollY, 560);
+  }],
+  ['reduced motion cancels animation and keeps subsequent wheel input native', () => {
+    const h = makeHarness(120);
+    h.wheel(120);
+    h.advance(2);
+    const stoppedAt = h.window.scrollY;
+    h.setReducedMotion(true);
+    assert.equal(h.controller.getTarget(), null);
+    assert.deepEqual(h.wheel(120), { target: null, prevented: false });
+    h.finish();
+    assert.equal(h.window.scrollY, stoppedAt);
+  }],
+  ['keyboard and external scrolling take over from wheel animation', () => {
+    const keyboard = makeHarness(120);
+    keyboard.wheel(120);
+    keyboard.emit('keydown', { key: 'PageDown' });
+    assert.equal(keyboard.controller.getTarget(), null);
+    const external = makeHarness(120);
+    external.wheel(120);
+    external.window.scrollY = 200;
+    external.emit('scroll');
+    external.finish();
+    assert.equal(external.window.scrollY, 200);
+    assert.equal(external.controller.getTarget(), null);
+  }],
+  ['zoom and horizontal wheel gestures remain native', () => {
+    const h = makeHarness(120);
+    assert.deepEqual(h.wheel(120, 0, { ctrlKey: true }), { target: null, prevented: false });
+    assert.deepEqual(h.wheel(120, 0, { deltaX: 180 }), { target: null, prevented: false });
+  }],
+  ['destroy removes listeners and cancels pending movement', () => {
+    const h = makeHarness(120);
+    h.wheel(120);
+    h.controller.destroy();
+    assert.equal(h.events.size, 0);
+    assert.equal(h.mediaEvents.size, 0);
+    assert.equal(h.controller.getTarget(), null);
+    h.finish();
+    assert.equal(h.window.scrollY, 120);
   }],
 ];
 

@@ -285,6 +285,34 @@ a:hover { color: #efee74; }
   overflow: hidden;
   background: #000;
 }
+.footer-meta {
+  position: absolute;
+  inset: auto clamp(24px, 5.55vw, 100px) max(16px, env(safe-area-inset-bottom)) 36%;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: 20px;
+  line-height: 1.2;
+  letter-spacing: -.05em;
+}
+.footer-meta p { margin: 0; }
+.footer-meta span, .footer-meta time { display: block; }
+.footer-clock {
+  font-family: 'Neue Montreal Display', Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+}
+@media (max-width: 809px) {
+  .footer-meta {
+    inset-inline: 16px;
+    bottom: max(32px, env(safe-area-inset-bottom));
+    font-size: 18px;
+  }
+}
+@media (max-height: 500px) and (min-aspect-ratio: 6/5) {
+  .footer-meta { inset-inline: 16px; bottom: max(16px, env(safe-area-inset-bottom)); font-size: 16px; }
+}
 .descent-scene {
   position: absolute;
   z-index: 4;

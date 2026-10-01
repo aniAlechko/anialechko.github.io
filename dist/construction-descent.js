@@ -120,11 +120,20 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     onLayout(null);
   }
 
+  function sizeLanding() {
+    // Safari's bars change innerHeight during a swipe. Grow the landing space
+    // without shortening the route or moving its endpoint under the character.
+    const minimum = Math.max(geometry.landingHeight || 0, window.innerHeight,
+      Math.ceil(geometry.top + 1249 * geometry.unit + 24));
+    site.style.setProperty('--landing-height', `${minimum}px`);
+    // CSS reserves the large viewport from the start, before Safari can clamp
+    // the scroll position as its toolbar disappears.
+    geometry.landingHeight = Math.max(minimum, site.getBoundingClientRect().height);
+    scene.style.height = `${geometry.total + geometry.landingHeight}px`;
+  }
+
   function measure() {
-    cancelSpeechReplay();
-    hideScene();
     needsMeasure = false;
-    snapNext = true;
     if (reducedMotion.matches) {
       useNativeLayout();
       return;
@@ -133,29 +142,40 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     const heroHeight = hero.getBoundingClientRect().height;
     if (bounds.height <= 0 || heroHeight <= 0) throw new Error('Avatar has no measurable size.');
     const unit = bounds.height / 1180;
-    const pitch = 224 * unit;
-    const steps = Math.ceil(Math.max(heroHeight, window.innerHeight * 1.3) / pitch);
-    const total = steps * pitch;
     const center = bounds.left + bounds.width / 2;
     // Keep fractional layout coordinates, excluding only the entrance jump.
     // offsetTop rounds the mobile flex position and causes a handoff shift.
     const transform = getComputedStyle(original).transform;
     const jumpOffset = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
     const top = bounds.top + window.scrollY - jumpOffset;
+    // A browser-toolbar resize is not a new layout. Keep the current pose,
+    // ladder nodes, and arrival animation when the page itself has not moved.
+    if (geometry && geometry.width === window.innerWidth
+      && Math.abs(geometry.heroHeight - heroHeight) < 0.5
+      && Math.abs(geometry.unit * 1180 - bounds.height) < 0.5
+      && Math.abs(geometry.center - center) < 0.5
+      && Math.abs(geometry.top - top) < 0.5) {
+      sizeLanding();
+      return;
+    }
+    cancelSpeechReplay();
+    hideScene();
+    snapNext = true;
+    const pitch = 224 * unit;
+    const steps = Math.ceil(Math.max(heroHeight, window.innerHeight * 1.3) / pitch);
+    const total = steps * pitch;
     const xUnit = unit * 380 / 299;
     const yUnit = unit * 224 / 217;
     const foot = top + 1242 * unit;
     const ladderTop = foot - (Math.ceil(1242 / 224) + 1) * pitch - 108 * yUnit;
     const tileCount = Math.ceil((foot + total + pitch * 0.3 - ladderTop) / pitch);
-    const landingHeight = Math.max(window.innerHeight, Math.ceil(top + 1249 * unit + 24));
-    geometry = { unit, pitch, steps, total, top };
+    geometry = { unit, pitch, steps, total, top, center, heroHeight, width: window.innerWidth };
 
     scene.style.setProperty('--sprite-unit', `${unit}px`);
     scene.style.setProperty('--ladder-x-unit', `${xUnit}px`);
     scene.style.setProperty('--ladder-y-unit', `${yUnit}px`);
-    scene.style.height = `${total + landingHeight}px`;
     spacer.style.height = `${Math.max(0, total - heroHeight)}px`;
-    site.style.setProperty('--landing-height', `${landingHeight}px`);
+    sizeLanding();
     actor.style.left = `${center - 524 * unit / 2}px`;
     actor.style.top = `${top}px`;
     ladder.style.left = `${center - 374 * xUnit / 2}px`;
@@ -292,14 +312,17 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     try {
       if (needsMeasure) measure();
       if (!geometry || reducedMotion.matches || !assetsReady) return;
-      const scroll = Math.max(0, window.scrollY);
+      // Safari reports scroll positions outside the page during rubber-banding.
+      const maximumScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const scroll = clamp(window.scrollY, 0, maximumScroll);
+      const bottom = Math.min(geometry.total, maximumScroll);
       const reversing = scroll < lastScroll - 0.1;
       const descending = scroll > lastScroll + 0.1;
       lastScroll = scroll;
       const target = getScrollTarget();
       const endpointMargin = Math.min(geometry.pitch * 0.2, 12);
       const headingTop = target === null ? !descending : target <= 0.5;
-      const headingBottom = target === null ? !reversing : target >= geometry.total - 0.5;
+      const headingBottom = target === null ? !reversing : target >= bottom - 0.5;
       travel = clamp(scroll, 0, geometry.total);
       actor.style.top = `${geometry.top + travel}px`;
       // Begin during the visible arrival, not after the exponential tail.
@@ -320,9 +343,13 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
       // Page momentum owns the timing. Follow its actual position throughout
       // each rung instead of restarting a separate tween on every scroll event.
       if (!active) activate(!snapNext && step <= 3);
-      const nearBottom = geometry.total - travel <= endpointMargin && headingBottom
+      const nearBottom = bottom - scroll <= endpointMargin && headingBottom
         && (target !== null || turnDestination === 'bottom' || settledEndpoint === 'bottom');
-      if (travel >= geometry.total - 0.5 || nearBottom) {
+      // Keep the landing through small native-scroll rebounds. Only a real
+      // upward movement should reveal the ladder and turn the character again.
+      const holdingBottom = (turnDestination === 'bottom' || settledEndpoint === 'bottom')
+        && scroll >= bottom - clamp(geometry.pitch * 0.5, 12, 24);
+      if (scroll >= bottom - 0.5 || nearBottom || holdingBottom) {
         if (turnDestination !== 'bottom' && settledEndpoint !== 'bottom') arriveAt('bottom');
         snapNext = false;
         return;
@@ -342,7 +369,6 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   }
 
   function resized() {
-    cancelTurn();
     needsMeasure = true;
     schedule();
   }

@@ -32,6 +32,7 @@
 
 * { box-sizing: border-box; }
 html { scrollbar-width: none; }
+html, body { overscroll-behavior-y: none; }
 html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
 body { position: relative; margin: 0; }
 ::selection { color: #000; background: #efee74; }
@@ -47,6 +48,9 @@ a:hover { color: #efee74; }
   pointer-events: none;
   opacity: .64;
 }
+
+/* The fixed hero background must not show through Safari's bottom overscroll. */
+body:has(.descent-scene.is-landing, .descent-scene.is-landed) #hero-field { visibility: hidden; }
 
 .contact-header {
   position: fixed;
@@ -280,6 +284,7 @@ a:hover { color: #efee74; }
   position: relative;
   z-index: 1;
   min-height: var(--landing-height, 100svh);
+  min-height: max(100lvh, var(--landing-height, 100svh));
   overflow: hidden;
   background: #000;
 }

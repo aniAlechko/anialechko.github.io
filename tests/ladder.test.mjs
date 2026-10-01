@@ -7,6 +7,8 @@ import vm from 'node:vm';
 const modulePath = new URL('../site/avatar-ladder.js', import.meta.url);
 const source = await readFile(modulePath, 'utf8');
 const css = await readFile(new URL('../site/styles.css', import.meta.url), 'utf8');
+const html = await readFile(new URL('../site/index.html', import.meta.url), 'utf8');
+const pageStart = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
 // This DOM fixture models the landing rule's viewport floor, including its
 // physical scroll range before JavaScript receives a browser-toolbar resize.
 const landingRule = css.match(/\.landing\s*\{([^}]+)\}/)?.[1] || '';
@@ -18,7 +20,8 @@ function deferred() {
   return { promise, resolve };
 }
 
-function makeHarness({ pendingImages = false, pendingLayout = false, largeViewportHeight = 840 } = {}) {
+function makeHarness({ pendingImages = false, pendingLayout = false, largeViewportHeight = 840,
+  initialScroll = 0, runPageStart = false } = {}) {
   let now = 0;
   let nextId = 1;
   const timers = new Map();
@@ -102,7 +105,10 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
   scene.querySelector = selector => sceneNodes[selector] || null;
   scene.querySelectorAll = selector => selector === '.descent-image' ? Object.values(poses) : [];
   const window = {
-    scrollY: 0, innerWidth: viewport.width, innerHeight: viewport.height,
+    scrollY: initialScroll, innerWidth: viewport.width, innerHeight: viewport.height,
+    history: { scrollRestoration: 'auto' },
+    scrollTo({ top }) { this.scrollY = top; },
+    setTimeout: setTimer,
     addEventListener(type, fn) {
       if (!events.has(type)) events.set(type, new Set());
       events.get(type).add(fn);
@@ -110,6 +116,7 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     removeEventListener(type, fn) { events.get(type)?.delete(fn); },
     visualViewport: { width: viewport.width, height: viewport.height },
   };
+  documentElement.classList = classes();
   hero.getBoundingClientRect = () => ({ left: 0, top: -window.scrollY,
     width: viewport.width, height: viewport.stableHeight });
   original.getBoundingClientRect = () => ({ left: viewport.width / 2 - 55,
@@ -133,6 +140,7 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     setTimeout: setTimer, clearTimeout: id => timers.delete(id),
     console: { warn: (...args) => warnings.push(args) },
   });
+  if (runPageStart) vm.runInContext(pageStart, context);
   vm.runInContext(source.replace('export function initDescent', 'function initDescent'), context);
   const cleanup = context.initDescent({
     layoutReady: pendingLayout ? layoutReady.promise : Promise.resolve(),
@@ -196,6 +204,32 @@ async function landed(harness) {
 }
 
 const tests = [
+  ['reload resets the page before the ladder initializes', async () => {
+    assert.ok(pageStart, 'The early page bootstrap is missing');
+    assert.ok(html.indexOf('<script>') < html.indexOf('<link'), 'Scroll reset must not wait for external assets');
+    const h = makeHarness({ initialScroll: 1200, runPageStart: true });
+    assert.equal(h.window.history.scrollRestoration, 'manual');
+    assert.equal(h.window.scrollY, 0, 'Initialization started at the previous scroll position');
+    await h.ready();
+    assert.equal(h.scene.dataset.state, 'idle');
+    assert.equal(h.scene.hidden, true, 'The ladder appeared during the fresh entrance');
+    assert.equal(h.actor.dataset.pose, 'front');
+    h.cleanup();
+  }],
+  ['scrolling immediately after reload is not undone when loading finishes', async () => {
+    const h = makeHarness({ initialScroll: 1200, runPageStart: true,
+      pendingImages: true, pendingLayout: true });
+    await h.ready();
+    const total = h.route().total;
+    await h.scrollTo(total);
+    await h.finishLayout();
+    await h.finishImages();
+    await h.tick(4500);
+    assert.equal(h.window.scrollY, total, 'A late load callback reset deliberate user scrolling');
+    assert.equal(h.scene.dataset.state, 'landed');
+    assert.equal(h.actor.dataset.pose, 'front');
+    h.cleanup();
+  }],
   ['bounce during the first landing turn does not turn the avatar back', async () => {
     const h = makeHarness();
     await h.ready();

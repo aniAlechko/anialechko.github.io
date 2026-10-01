@@ -98,14 +98,17 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
     strength = continuing
       ? Math.min(1, strength * Math.exp(-interval / 260) + Math.abs(delta) / 480)
       : Math.min(1, Math.abs(delta) / 700);
-    responseTime = 90 + 90 * strength;
+    responseTime = 105 - 35 * strength;
     lastWheelTime = now;
     if (!frame || (direction && direction !== sign)) {
       position = target = ownScroll = window.scrollY;
     }
     // Strong bursts build speed and leave a few rungs of momentum, without
     // accumulating a long queue after the user releases the wheel.
-    const lead = route ? route.pitch * (3 + 3 * strength) : window.innerHeight * 0.4;
+    const segments = route?.segments || (route ? [{ start: 0, end: route.total }] : []);
+    const onLadder = segments.some(({ start, end }) =>
+      (position >= start && position <= end) || (target >= start && target <= end));
+    const lead = onLadder ? route.pitch * (3 + 3 * strength) : window.innerHeight * 0.4;
     const requested = target + delta * (1 + 0.9 * strength);
     const destination = restingTarget(Math.max(position - lead, Math.min(position + lead, requested)), sign);
     if (!frame && Math.abs(destination - position) < 0.4) return;

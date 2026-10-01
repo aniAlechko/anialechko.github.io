@@ -32,6 +32,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   let snapNext = true;
   let active = false;
   let travel = 0;
+  let renderedTravel = null;
   let climbingTravel = 0;
   let lastScroll = Math.max(0, window.scrollY);
   let turnAnimation;
@@ -44,6 +45,15 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   let speechAnimations = [];
   let speechRun = 0;
   let skillsObserver;
+  let renderedPose;
+  let renderedState;
+
+  function moveActor() {
+    if (renderedTravel === travel) return;
+    // Keep layout coordinates stable while scrolling; only composite the travel.
+    actor.style.transform = `translate3d(0, ${travel}px, 0)`;
+    renderedTravel = travel;
+  }
 
   function cancelSpeechReplay() {
     speechRun++;
@@ -76,12 +86,16 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   }
 
   function setPose(name) {
+    if (renderedPose === name) return;
     for (const [pose, image] of Object.entries(poses)) image.hidden = pose !== name;
     actor.dataset.pose = name;
+    renderedPose = name;
   }
 
   function setState(state) {
+    if (renderedState === state) return;
     scene.dataset.state = state;
+    renderedState = state;
   }
 
   function cancelTurn() {
@@ -114,19 +128,24 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     cancelSpeechReplay();
     hideScene();
     spacer.style.height = '0px';
+    spacer.style.removeProperty('--about-entry-offset');
     scene.style.removeProperty('height');
     site.style.removeProperty('--landing-height');
+    site.style.removeProperty('--landing-offset');
     geometry = undefined;
     onLayout(null);
   }
 
   function sizeLanding() {
-    // Safari's bars change innerHeight during a swipe. Grow the landing space
-    // without shortening the route or moving its endpoint under the character.
-    const minimum = Math.max(geometry.landingHeight || 0, window.innerHeight);
+    // Reserve only enough page below the avatar to reach its final rung.
+    // Keep that reserve stable when Safari's toolbar changes the viewport.
+    const minimum = Math.max(0, geometry.landingMinimum || 0,
+      window.innerHeight - geometry.landingOffset + 24);
+    geometry.landingMinimum = minimum;
+    site.style.setProperty('--landing-offset', `${geometry.landingOffset}px`);
     site.style.setProperty('--landing-height', `${minimum}px`);
-    // CSS reserves the large viewport from the start, before Safari can clamp
-    // the scroll position as its toolbar disappears.
+    // CSS applies the same reserve against 100lvh before Safari can clamp the
+    // scroll position. The footer's own content can exceed this minimum.
     geometry.landingHeight = Math.max(minimum, site.getBoundingClientRect().height);
     scene.style.height = `${geometry.distance + geometry.landingOffset + geometry.landingHeight}px`;
   }
@@ -139,7 +158,12 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     }
     const bounds = original.getBoundingClientRect();
     const heroHeight = hero.getBoundingClientRect().height;
-    const requiredSkillsSpace = skills
+    const aboutRequest = getAboutLayout();
+    const nativeStage = aboutRequest?.nativeStage === true;
+    const stageHeight = nativeStage ? Math.max(1, aboutRequest.stageHeight || heroHeight) : 0;
+    // A sticky block's bounding bottom changes while scrolling. Its reserved
+    // stage height is stable and must not trigger a new ladder at each resize.
+    const requiredSkillsSpace = nativeStage ? stageHeight : skills
       ? Math.max(0, skills.getBoundingClientRect().bottom - spacer.getBoundingClientRect().top + 48)
       : 0;
     if (bounds.height <= 0 || heroHeight <= 0) throw new Error('Avatar has no measurable size.');
@@ -151,17 +175,17 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     const jumpOffset = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
     const top = bounds.top + window.scrollY - jumpOffset;
     const pitch = 224 * unit;
-    const aboutRequest = getAboutLayout();
     const aboutScroll = aboutRequest?.scroll || 0;
     const aboutHold = aboutRequest?.hold || 0;
     // Contact follows the complete About composition, without another climb
     // or an empty viewport between the standing avatar and the footer.
-    const landingOffset = aboutRequest
+    const landingOffset = nativeStage ? stageHeight : aboutRequest
       ? Math.max(top + 1249 * unit, aboutRequest.contentBottom || 0) + 32
-      : top + 1249 * unit + 32 + 2 * pitch;
+      : top + 1249 * unit + 16;
     // A browser-toolbar resize is not a new layout. Keep the current pose,
     // ladder nodes, and arrival animation when the page itself has not moved.
     if (geometry && geometry.width === window.innerWidth
+      && geometry.nativeStage === nativeStage
       && Math.abs(geometry.heroHeight - heroHeight) < 0.5
       && Math.abs(geometry.unit * 1180 - bounds.height) < 0.5
       && Math.abs(geometry.center - center) < 0.5
@@ -176,14 +200,15 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     cancelSpeechReplay();
     hideScene();
     snapNext = true;
-    const minContactStart = Math.max(heroHeight + requiredSkillsSpace, window.innerHeight * 1.3);
+    // Leave a full extra screen for the descent, using the stable hero height.
+    const minContactStart = Math.max(heroHeight + requiredSkillsSpace, heroHeight * 2.3);
     let steps = Math.max(1, Math.ceil((minContactStart - landingOffset) / pitch));
     let distance = steps * pitch;
     let total = distance;
     let about = null;
     let segments = [{ start: 0, end: total }];
     if (aboutRequest) {
-      const start = Math.max(pitch, Math.ceil(aboutScroll / pitch) * pitch);
+      const start = Math.max(pitch, Math.ceil(Math.max(aboutScroll, nativeStage ? heroHeight : 0) / pitch) * pitch);
       about = { start, end: start + Math.max(pitch, Math.ceil(aboutHold / pitch) * pitch) };
       distance = about.end;
       total = distance;
@@ -194,21 +219,25 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     const yUnit = unit * 224 / 217;
     const foot = top + 1242 * unit;
     const ladderTop = foot - (Math.ceil(1242 / 224) + 1) * pitch - 108 * yUnit;
-    const tileCount = Math.ceil((foot + (about?.start ?? distance) + pitch * 0.3 - ladderTop) / pitch);
-    geometry = { unit, pitch, steps, total, distance, about, aboutScroll, aboutHold, segments, top, center, heroHeight, requiredSkillsSpace,
+    const contactStart = distance + landingOffset;
+    const ladderBottom = about ? foot + about.start + pitch * 0.3 : contactStart;
+    const tileCount = Math.ceil((ladderBottom - ladderTop) / pitch);
+    geometry = { unit, pitch, steps, total, distance, about, aboutScroll, aboutHold, nativeStage, segments, top, center, heroHeight, requiredSkillsSpace,
       landingOffset, width: window.innerWidth };
 
     scene.style.setProperty('--sprite-unit', `${unit}px`);
     scene.style.setProperty('--ladder-x-unit', `${xUnit}px`);
     scene.style.setProperty('--ladder-y-unit', `${yUnit}px`);
-    const skillsEnd = distance + landingOffset;
-    spacer.style.height = `${Math.max(0, skillsEnd - heroHeight)}px`;
+    spacer.style.height = `${Math.max(0, contactStart - heroHeight)}px`;
+    if (nativeStage) spacer.style.setProperty('--about-entry-offset', `${Math.max(0, about.start - heroHeight)}px`);
+    else spacer.style.removeProperty('--about-entry-offset');
     sizeLanding();
     actor.style.left = `${center - 524 * unit / 2}px`;
     actor.style.top = `${top}px`;
+    moveActor();
     ladder.style.left = `${center - 374 * xUnit / 2}px`;
     ladder.style.top = `${ladderTop}px`;
-    ladder.style.height = `${tileCount * pitch}px`;
+    ladder.style.height = `${about ? tileCount * pitch : contactStart - ladderTop}px`;
 
     const fragment = document.createDocumentFragment();
     for (let index = 0; index < tileCount; index++) {
@@ -281,7 +310,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     cancelSpeechReplay();
     settledEndpoint = null;
     active = true;
-    actor.style.top = `${geometry.top + travel}px`;
+    moveActor();
     scene.hidden = false;
     scene.classList.remove('is-landed');
     hero.classList.add('descent-active');
@@ -326,7 +355,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   }
 
   function placeActor() {
-    actor.style.top = `${geometry.top + travel}px`;
+    moveActor();
     const step = clamp(Math.round(climbingTravel / geometry.pitch), 0, geometry.steps);
     scene.classList.remove('is-landed');
     setPose(step % 2 ? 'b' : 'a');
@@ -356,7 +385,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
       // while the page consumes this interval, without advancing a climbing step.
       travel = climbingTravel + (geometry.about
         ? clamp(scroll - geometry.about.start, 0, geometry.about.end - geometry.about.start) : 0);
-      actor.style.top = `${geometry.top + travel}px`;
+      moveActor();
       // Begin during the visible arrival, not after the exponential tail.
       // Only a target at the endpoint qualifies; ordinary rung stops do not.
       const nearTop = scroll <= endpointMargin && headingTop

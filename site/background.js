@@ -325,8 +325,12 @@ if (originalCanvas) {
     width = Math.max(1, bounds.width);
     height = Math.max(1, bounds.height);
     dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
+    const pixelWidth = Math.round(width * dpr);
+    const pixelHeight = Math.round(height * dpr);
+    // Safari's toolbar can resize the viewport without changing this canvas.
+    // Setting an unchanged dimension still clears and reallocates its buffer.
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     if (gl) gl.viewport(0, 0, canvas.width, canvas.height);
     render();
   }

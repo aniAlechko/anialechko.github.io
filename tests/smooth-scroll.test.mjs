@@ -123,6 +123,27 @@ const tests = [
     h.finish();
     assert.ok(h.window.scrollY > 990);
   }],
+  ['a strong burst settles within 640ms after the last wheel input', () => {
+    const h = makeHarness(40);
+    h.wheel(120);
+    h.advance(2);
+    h.wheel(240);
+    h.advance(2);
+    const destination = h.wheel(360).target;
+    const releasedAt = h.window.scrollY;
+    assert.ok(destination > releasedAt + route.pitch, 'The burst lost its forward momentum');
+    h.advance(40);
+    assert.equal(h.controller.getTarget(), null, 'A strong gesture left a long easing tail');
+    assert.equal(h.window.scrollY, destination);
+  }],
+  ['contact scrolling uses the viewport instead of the ladder rung size', () => {
+    const h = makeHarness(1200);
+    const destination = h.wheel(700).target;
+    assert.equal(destination, 1200 + h.window.innerHeight * 0.4,
+      'The old ladder geometry limited scrolling inside contact');
+    h.finish();
+    assert.equal(h.window.scrollY, destination);
+  }],
   ['reversing direction before arrival follows the new input', () => {
     const h = makeHarness(380);
     assert.ok(h.wheel(120).target > 400);

@@ -185,9 +185,8 @@ a:hover { color: #efee74; }
   text-transform: uppercase;
 }
 .hero-details p { margin: 0; }
-.hero-intro { position: relative; width: max-content; }
-.intro-row { position: relative; display: block; transform-origin: left center; }
-.intro-word { display: inline-block; vertical-align: top; white-space: nowrap; }
+.hero-intro { width: max-content; }
+.intro-row { display: block; white-space: nowrap; }
 .status { text-align: left; }
 .scroll-indicator {
   position: absolute;
@@ -216,16 +215,16 @@ a:hover { color: #efee74; }
 .js:not(.is-ready) #hero-field { visibility: hidden; }
 .is-entering .given-name .name-word { animation: name-enter .4s cubic-bezier(.5, 0, .88, .77) 1.2s both; }
 .is-entering .family-name .name-word { animation: name-enter .4s cubic-bezier(0, .72, .56, 1) 1.6s both; }
-.is-entering .hero-details { animation: details-enter .4s cubic-bezier(.44, 0, .56, 1) 1s both; }
-.is-entering .scroll-indicator { animation: details-enter .4s ease-out 1s both; }
+.is-entering .hero-details { animation: fade-in .4s cubic-bezier(.44, 0, .56, 1) 1s both; }
+.is-entering .scroll-indicator { animation: fade-in .4s ease-out 1s both; }
 .is-entering:not(.character-landed) .character {
-  animation: character-jump .6s linear 2s both, character-reveal .08s linear 2s both;
+  animation: character-jump .6s linear 2s both, fade-in .08s linear 2s both;
 }
-.is-entering .speech { animation: bubble-appear .01s linear 2.6s both; }
+.is-entering .speech { animation: fade-in .01s linear 2.6s both; }
 .is-entering .speech-word { animation: speech-word-rise .5s cubic-bezier(.3, 0, 0, 1) calc(2.7s + var(--word-delay)) both; }
 
 @keyframes name-enter { from { opacity: 0; transform: translateY(150px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes details-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes scroll-hint {
   0%, 65%, 100% { transform: translateY(0); }
   32% { transform: translateY(30%); }
@@ -242,8 +241,6 @@ a:hover { color: #efee74; }
   }
   100% { transform: translateY(0); }
 }
-@keyframes character-reveal { from { opacity: 0; } to { opacity: 1; } }
-@keyframes bubble-appear { from { opacity: 0; } to { opacity: 1; } }
 /* Reference word rise: 27.36 logical pixels in a 194-pixel-wide bubble. */
 @keyframes speech-word-rise { from { transform: translateY(14.103cqw); } to { transform: translateY(0); } }
 
@@ -284,7 +281,6 @@ a:hover { color: #efee74; }
   .hero-details { position: static; width: max-content; max-width: 100%; margin: var(--footer-gap) auto 0; flex-direction: column; align-items: stretch; text-align: center; font-size: var(--details-size); line-height: 1.12; gap: 8px; }
   .status { text-align: center; }
   .hero-intro { width: 100%; }
-  .intro-row { transform-origin: right center; }
   .scroll-indicator { width: 16px; height: 16px; bottom: 8px; }
   .is-entering .given-name .name-word { animation: mobile-name-enter .4s cubic-bezier(.22, 1, .36, 1) 1s both; }
   .is-entering .family-name .name-word { animation: mobile-name-enter .4s cubic-bezier(.22, 1, .36, 1) 1.075s both; }

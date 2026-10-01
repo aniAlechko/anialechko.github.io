@@ -3,20 +3,19 @@ import { initSmoothScroll } from './smooth-scroll.js';
 
 const page = document.documentElement;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const backgroundReady = new Promise(resolve => {
-  if (page.dataset.backgroundReady === 'true') return resolve();
-  const ready = () => { clearTimeout(timeout); resolve(); };
-  const timeout = setTimeout(() => {
-    document.removeEventListener('hero:background-ready', ready);
-    resolve();
-  }, 1800);
-  document.addEventListener('hero:background-ready', ready, { once: true });
-});
 
-const fontsReady = Promise.all([
+function waitForAssets(promise, milliseconds) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise(resolve => { timer = setTimeout(resolve, milliseconds); }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+const fontsReady = Promise.allSettled([
   document.fonts.load('700 100px "Neue Montreal Display"'),
   document.fonts.load('700 20px "Neue Montreal"'),
-]).catch(() => undefined);
+]);
 
 const contactSection = document.querySelector('.landing');
 const contactTitle = document.querySelector('#contact-title');
@@ -26,12 +25,19 @@ if (contactSection && contactTitle) {
   let revealStart = 0;
   let revealEnd = 1;
   let distance = 0;
-  let motionFrame = 0;
-  let measureFrame = 0;
+  let frame = 0;
+  let needsMeasure = true;
   let previousShift;
 
   const renderContact = () => {
-    motionFrame = 0;
+    frame = 0;
+    if (needsMeasure) {
+      needsMeasure = false;
+      const titleTop = contactTitle.getBoundingClientRect().top + window.scrollY;
+      revealEnd = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      revealStart = Math.max(0, Math.min(revealEnd - 1, titleTop - window.innerHeight));
+      distance = Math.min(160, window.innerWidth * .08);
+    }
     const progress = Math.min(1, Math.max(0, (window.scrollY - revealStart) / (revealEnd - revealStart)));
     const shift = reducedMotion.matches ? '0px' : `${((1 - progress) * distance).toFixed(2)}px`;
     if (shift === previousShift) return;
@@ -39,18 +45,11 @@ if (contactSection && contactTitle) {
     contactTitle.style.setProperty('--contact-shift', shift);
   };
   const scheduleContact = () => {
-    if (!motionFrame) motionFrame = requestAnimationFrame(renderContact);
-  };
-  const measureContact = () => {
-    measureFrame = 0;
-    const titleTop = contactTitle.getBoundingClientRect().top + window.scrollY;
-    revealEnd = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-    revealStart = Math.max(0, Math.min(revealEnd - 1, titleTop - window.innerHeight));
-    distance = Math.min(160, window.innerWidth * .08);
-    scheduleContact();
+    if (!frame) frame = requestAnimationFrame(renderContact);
   };
   refreshContact = () => {
-    if (!measureFrame) measureFrame = requestAnimationFrame(measureContact);
+    needsMeasure = true;
+    scheduleContact();
   };
   const contactObserver = new ResizeObserver(refreshContact);
   contactObserver.observe(contactSection);
@@ -67,7 +66,6 @@ const idleImage = document.querySelector('.character-pose--idle .character-image
 const jumpImage = document.querySelector('.character-pose--jump .character-image');
 const lastIntroWord = document.querySelector('.speech-word-mask:last-child .speech-word');
 let jumpReady = false;
-let introSkipped = false;
 let introFinished = false;
 const characterReady = Promise.all([
   idleImage?.decode().catch(() => undefined),
@@ -87,8 +85,8 @@ const finishIntro = event => {
   page.classList.remove('is-entering');
 };
 const skipIntro = () => {
-  if (introSkipped || introFinished) return;
-  introSkipped = true;
+  if (introFinished) return;
+  introFinished = true;
   removeIntroListeners();
   page.classList.add('skip-intro', 'character-landed', 'is-ready');
   page.classList.remove('is-entering');
@@ -127,18 +125,21 @@ try {
   console.warn('Character descent unavailable; the page remains scrollable.', error);
 }
 
-import('./background.js').catch(error => {
+let enterBackground = () => {};
+const backgroundReady = import('./background.js').then(async ({ initBackground }) => {
+  enterBackground = await initBackground(waitForAssets(fontsReady, 1800));
+  // A late renderer joins the settled page without replaying the entrance.
+  if (page.classList.contains('is-ready')) enterBackground();
+}).catch(error => {
   console.warn('Background unavailable; the portfolio contact page remains usable.', error);
-  document.dispatchEvent(new CustomEvent('hero:background-ready'));
 });
 
-await Promise.race([
-  Promise.all([fontsReady, backgroundReady, characterReady]),
-  new Promise(resolve => setTimeout(resolve, 2000)),
-]);
+await waitForAssets(Promise.all([
+  fontsReady, waitForAssets(backgroundReady, 1800), characterReady,
+]), 2000);
 
 if (jumpReady) page.classList.add('has-jump-pose');
-if (introSkipped || reducedMotion.matches || page.classList.contains('is-ready')) skipIntro();
+if (introFinished || reducedMotion.matches || page.classList.contains('is-ready')) skipIntro();
 else {
   page.classList.add('is-entering');
   character?.addEventListener('animationend', finishJump);
@@ -147,6 +148,5 @@ else {
   lastIntroWord?.addEventListener('animationcancel', finishIntro);
 }
 
-page.dataset.heroEntered = 'true';
-document.dispatchEvent(new CustomEvent('hero:enter'));
+enterBackground();
 page.classList.add('is-ready');

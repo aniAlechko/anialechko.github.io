@@ -20,22 +20,16 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
 
   function restingTarget(value, sign = 0) {
     const bounded = clamp(value, maxScroll());
-    if (!route) return bounded;
-    const segments = route.segments || [{ start: 0, end: route.total }];
-    const segment = segments.find(({ start, end }) => bounded >= start && bounded <= end);
-    let destination = bounded;
-    if (segment) {
-      destination = segment.start + Math.round((bounded - segment.start) / route.pitch) * route.pitch;
-      // A small line-mode wheel delta must still move in its requested direction.
-      if (sign > 0 && destination <= position + 0.4) {
-        destination = segment.start + (Math.floor((position - segment.start) / route.pitch) + 1) * route.pitch;
-      }
-      if (sign < 0 && destination >= position - 0.4) {
-        destination = segment.start + (Math.ceil((position - segment.start) / route.pitch) - 1) * route.pitch;
-      }
-      destination = Math.max(segment.start, Math.min(destination, segment.end));
+    if (!route || bounded > route.total) return bounded;
+    let destination = Math.round(bounded / route.pitch) * route.pitch;
+    // A small line-mode wheel delta must still move in its requested direction.
+    if (sign > 0 && destination <= position + 0.4) {
+      destination = (Math.floor(position / route.pitch) + 1) * route.pitch;
     }
-    return clamp(destination, maxScroll());
+    if (sign < 0 && destination >= position - 0.4) {
+      destination = (Math.ceil(position / route.pitch) - 1) * route.pitch;
+    }
+    return clamp(destination, Math.min(route.total, maxScroll()));
   }
 
   function stop() {
@@ -105,9 +99,8 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
     }
     // Strong bursts build speed and leave a few rungs of momentum, without
     // accumulating a long queue after the user releases the wheel.
-    const segments = route?.segments || (route ? [{ start: 0, end: route.total }] : []);
-    const onLadder = segments.some(({ start, end }) =>
-      (position >= start && position <= end) || (target >= start && target <= end));
+    const onLadder = route && ((position >= 0 && position <= route.total)
+      || (target >= 0 && target <= route.total));
     const lead = onLadder ? route.pitch * (3 + 3 * strength) : window.innerHeight * 0.4;
     const requested = target + delta * (1 + 0.9 * strength);
     const destination = restingTarget(Math.max(position - lead, Math.min(position + lead, requested)), sign);

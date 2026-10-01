@@ -1,6 +1,6 @@
-const originalCanvas = document.querySelector('#hero-field');
-
-if (originalCanvas) {
+export async function initBackground(fontsReady) {
+  const originalCanvas = document.querySelector('#hero-field');
+  if (!originalCanvas) return () => {};
   const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
   const TAU = Math.PI * 2;
   const SETTLED_AMPLITUDE = 0.0935;
@@ -25,7 +25,6 @@ if (originalCanvas) {
   let elapsed = 0;
   let introStart = null;
   let entryStarted = false;
-  let entryRequested = document.documentElement.dataset.heroEntered === 'true';
   let ready = false;
   let visible = false;
   const trails = new Float32Array(TRAIL_COUNT * 4);
@@ -387,8 +386,7 @@ if (originalCanvas) {
   }
 
   function startEntry() {
-    entryRequested = true;
-    if (!ready || entryStarted) return;
+    if (entryStarted) return;
     entryStarted = true;
     if (document.documentElement.classList.contains('is-ready')
         || document.documentElement.classList.contains('skip-intro')) return;
@@ -409,7 +407,6 @@ if (originalCanvas) {
   });
   heroVisibility.observe(originalCanvas.closest('.hero') || originalCanvas.parentElement);
 
-  document.addEventListener('hero:enter', startEntry);
   window.addEventListener('pointermove', (event) => {
     if (motionPreference.matches || !visible || !gl || event.pointerType === 'touch') return;
     const bounds = canvas.getBoundingClientRect();
@@ -423,39 +420,15 @@ if (originalCanvas) {
   motionPreference.addEventListener('change', updatePlayback);
   document.addEventListener('visibilitychange', updatePlayback);
 
-  async function initialize() {
-    try {
-      await Promise.race([
-        document.fonts.load('700 200px "Neue Montreal Display"'),
-        new Promise((resolve) => setTimeout(resolve, 1800)),
-      ]);
-    } catch {
-      // A local browser font can still supply the source graphic if font loading fails.
-    }
-    buildSourceGraphic();
-    try {
-      initializeWebGL();
-    } catch {
-      useStaticFallback();
-    }
-    ready = true;
-    // A slow module must join a page that has already entered in its settled state.
-    if (entryRequested || document.documentElement.dataset.heroEntered === 'true'
-        || document.documentElement.classList.contains('is-ready')) {
-      entryStarted = true;
-    }
-    resize();
-    document.documentElement.dataset.backgroundReady = 'true';
-    document.dispatchEvent(new CustomEvent('hero:background-ready', { detail: { renderer: gl ? 'webgl' : 'fallback' } }));
-    updatePlayback();
-    setTimeout(() => {
-      if (!entryStarted && document.documentElement.classList.contains('is-ready')) {
-        entryStarted = true;
-      } else if (!entryStarted) {
-        startEntry();
-      }
-    }, 3000);
+  await fontsReady;
+  buildSourceGraphic();
+  try {
+    initializeWebGL();
+  } catch {
+    useStaticFallback();
   }
-
-  initialize();
+  ready = true;
+  resize();
+  updatePlayback();
+  return startEntry;
 }

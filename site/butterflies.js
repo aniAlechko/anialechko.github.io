@@ -1,139 +1,236 @@
 const TAU = Math.PI * 2;
-const FOREWING = 'M0 0C54-22 74-170 191-250C258-294 360-275 347-191C336-109 249-36 123-6C62 8 23 15 0 0Z';
-const HINDWING = 'M0 0C65-27 151-38 221-2C311 53 297 149 234 169C191 179 158 145 127 196C91 183 56 144 20 63Z';
-const PALETTES = [
-  { root: '#241552', middle: '#2169d7', light: '#68e5f0', edge: '#283967', spot: '#b7efff', vein: '#10183d' },
-  { root: '#371950', middle: '#ca5487', light: '#ffbd8f', edge: '#5b397f', spot: '#ffe7b4', vein: '#381e47' },
-];
+const ATLAS_URL = new URL('./images/butterfly-atlas.png', import.meta.url).href;
+const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+const smoothstep = (low, high, value) => {
+  const amount = clamp((value - low) / (high - low), 0, 1);
+  return amount * amount * (3 - 2 * amount);
+};
 
-function makeWing(palette, forewing) {
-  const texture = document.createElement('canvas');
-  texture.width = 500;
-  texture.height = 700;
-  const context = texture.getContext('2d');
-  if (!context) return null;
-  context.scale(1.25, 1.25);
-  context.translate(20, 290);
-  const shape = new Path2D(forewing ? FOREWING : HINDWING);
-  context.save();
-  context.clip(shape);
-  const wash = context.createLinearGradient(-10, 0, 340, forewing ? -180 : 110);
-  wash.addColorStop(0, palette.root);
-  wash.addColorStop(0.28, palette.middle);
-  wash.addColorStop(0.7, palette.light);
-  wash.addColorStop(1, palette.edge);
-  context.fillStyle = wash;
-  context.fillRect(-20, -290, 400, 560);
-
-  // Long translucent scales give the wing a luminous surface between its veins.
-  for (let index = 0; index < 32; index += 1) {
-    const angle = forewing ? -1.03 + index * 0.032 : -0.05 + index * 0.045;
-    context.beginPath();
-    context.moveTo(0, 0);
-    context.lineTo(Math.cos(angle) * 470, Math.sin(angle) * 470);
-    context.strokeStyle = index % 3 === 0 ? '#ffffff13' : '#1408290b';
-    context.lineWidth = 5 + (index % 4) * 2;
-    context.stroke();
-  }
-
-  const veins = forewing
-    ? [[191, -250], [245, -272], [304, -263], [348, -218], [329, -151], [276, -85], [211, -34], [133, -7]]
-    : [[220, -3], [277, 54], [278, 107], [234, 166], [188, 158], [128, 194], [72, 157]];
-  for (const [x, y] of veins) {
-    context.beginPath();
-    context.moveTo(3, 0);
-    context.quadraticCurveTo(x * 0.48, y * 0.25 - 13, x, y);
-    context.strokeStyle = palette.vein;
-    context.lineWidth = 5;
-    context.stroke();
-    context.strokeStyle = '#ffffff28';
-    context.lineWidth = 1.2;
-    context.stroke();
-  }
-  context.lineWidth = forewing ? 19 : 15;
-  context.strokeStyle = palette.vein;
-  context.stroke(shape);
-
-  const spots = forewing
-    ? [[208, -247, 5], [241, -258, 6], [275, -254, 7], [309, -237, 8], [329, -211, 7], [324, -179, 6], [305, -144, 5], [280, -113, 4], [253, -87, 4]]
-    : [[248, 34, 5], [266, 66, 6], [261, 102, 7], [235, 135, 6], [201, 139, 5], [160, 151, 5], [128, 167, 5], [102, 148, 4]];
-  for (const [x, y, radius] of spots) {
-    context.beginPath();
-    context.ellipse(x, y, radius, radius * 1.5, forewing ? 0.75 : -0.6, 0, TAU);
-    context.fillStyle = palette.spot;
-    context.fill();
-  }
-
-  // A broad highlight remains readable after the surface is sampled into dots.
-  const sheen = context.createRadialGradient(150, forewing ? -140 : 82, 3, 155, forewing ? -137 : 77, 135);
-  sheen.addColorStop(0, '#fff5da35');
-  sheen.addColorStop(1, '#fff5da00');
-  context.fillStyle = sheen;
-  context.fillRect(0, -280, 370, 500);
-  context.restore();
-  return texture;
+function makeCanvas(width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
 }
 
-function drawButterfly(context, wings, palette, x, y, size, angle, time, phase, still) {
-  const beat = still ? 0.8 : Math.sin(time * 2.15 + phase);
-  const lift = still ? 0 : Math.cos(time * 2.15 + phase);
-  context.save();
-  context.translate(x, y);
-  context.rotate(angle + (still ? 0 : Math.sin(time * 0.52 + phase) * 0.045));
-  context.scale(size / 710, size / 710);
+function separateBody(texture) {
+  const { width, height } = texture;
+  const wings = makeCanvas(width, height);
+  const body = makeCanvas(width, height);
+  const wingContext = wings.getContext('2d');
+  const bodyContext = body.getContext('2d');
+  // The antennae stay with the thorax while the wings hinge on either side.
+  const bodyMask = new Path2D();
+  bodyMask.moveTo(width * 0.35, 0);
+  bodyMask.lineTo(width * 0.65, 0);
+  bodyMask.lineTo(width * 0.545, height * 0.37);
+  bodyMask.lineTo(width * 0.535, height * 0.94);
+  bodyMask.lineTo(width * 0.465, height * 0.94);
+  bodyMask.lineTo(width * 0.455, height * 0.37);
+  bodyMask.closePath();
+  wingContext.drawImage(texture, 0, 0);
+  wingContext.globalCompositeOperation = 'destination-out';
+  wingContext.fill(bodyMask);
+  bodyContext.clip(bodyMask);
+  bodyContext.drawImage(texture, 0, 0);
+  return { wings, body, width, height };
+}
 
-  for (const forewing of [false, true]) {
+async function loadTextures() {
+  const image = new Image();
+  image.decoding = 'async';
+  // Loaded images can be drawn even when a background tab delays decode().
+  await new Promise((resolve, reject) => {
+    const finish = error => {
+      clearTimeout(timeout);
+      image.onload = null;
+      image.onerror = null;
+      if (error) reject(error);
+      else resolve();
+    };
+    const timeout = setTimeout(() => finish(new Error('Butterfly texture timed out')), 15000);
+    image.onload = () => finish(image.naturalWidth && image.naturalHeight ? null : new Error('Empty butterfly image'));
+    image.onerror = () => finish(new Error('Butterfly texture could not load'));
+    image.src = ATLAS_URL;
+    if (image.complete && image.naturalWidth && image.naturalHeight) finish();
+  });
+  const atlas = makeCanvas(image.naturalWidth, image.naturalHeight);
+  const context = atlas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(image, 0, 0);
+  const { data } = context.getImageData(0, 0, atlas.width, atlas.height);
+  return [0, 1].map(index => {
+    const start = Math.floor(index * atlas.width / 2);
+    const end = Math.floor((index + 1) * atlas.width / 2);
+    let left = end;
+    let right = start;
+    let top = atlas.height;
+    let bottom = 0;
+    for (let y = 0; y < atlas.height; y += 1) {
+      for (let x = start; x < end; x += 1) {
+        if (data[(y * atlas.width + x) * 4 + 3] < 16) continue;
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+      }
+    }
+    if (right <= left || bottom <= top) throw new Error('Empty butterfly texture');
+    const cropWidth = right - left + 1;
+    const cropHeight = bottom - top + 1;
+    const scale = Math.min(1, 512 / Math.max(cropWidth, cropHeight));
+    const texture = makeCanvas(Math.round(cropWidth * scale), Math.round(cropHeight * scale));
+    texture.getContext('2d').drawImage(image, left, top, cropWidth, cropHeight, 0, 0, texture.width, texture.height);
+    return separateBody(texture);
+  });
+}
+
+// A small local fallback keeps the footer usable if its image cannot be loaded.
+function fallbackTextures() {
+  return ['#168fe3', '#ee830b'].map(color => {
+    const texture = makeCanvas(512, 420);
+    const context = texture.getContext('2d');
+    context.translate(256, 200);
     for (const side of [-1, 1]) {
-      const reach = 0.8 + beat * 0.17 + side * 0.035;
       context.save();
-      // The two lobes flex separately at their roots, keeping their volume as they fold.
-      context.transform(side * reach, lift * (forewing ? -0.09 : -0.035), 0, 1 - Math.abs(lift) * 0.04, 0, 0);
-      context.rotate((forewing ? -0.025 : 0.035) * lift);
-      context.drawImage(wings[forewing ? 0 : 1], -20, -290, 400, 560);
+      context.scale(side, 1);
+      context.beginPath();
+      context.moveTo(8, -12);
+      context.bezierCurveTo(78, -118, 243, -232, 236, -95);
+      context.bezierCurveTo(232, -18, 197, 16, 139, 18);
+      context.bezierCurveTo(233, 90, 187, 219, 100, 176);
+      context.bezierCurveTo(48, 150, 20, 70, 8, -12);
+      context.fillStyle = color;
+      context.fill();
+      context.strokeStyle = '#29211c';
+      context.lineWidth = 14;
+      context.stroke();
+      for (const [x, y] of [[216, -136], [227, -72], [191, -18], [152, 112], [103, 159]]) {
+        context.beginPath();
+        context.moveTo(8, 0);
+        context.lineTo(x, y);
+        context.lineWidth = 4;
+        context.stroke();
+      }
       context.restore();
     }
+    context.fillStyle = '#786655';
+    context.beginPath();
+    context.ellipse(0, 22, 9, 65, 0, 0, TAU);
+    context.fill();
+    return separateBody(texture);
+  });
+}
+
+function drawTriangle(context, texture, source, destination, bleed, shade) {
+  const [a, b, c] = source;
+  const [p, q, r] = destination;
+  const determinant = a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y);
+  if (Math.abs(determinant) < 0.0001) return;
+  const matrix = axis => [
+    (p[axis] * (b.y - c.y) + q[axis] * (c.y - a.y) + r[axis] * (a.y - b.y)) / determinant,
+    (p[axis] * (c.x - b.x) + q[axis] * (a.x - c.x) + r[axis] * (b.x - a.x)) / determinant,
+    (p[axis] * (b.x * c.y - c.x * b.y) + q[axis] * (c.x * a.y - a.x * c.y) + r[axis] * (a.x * b.y - b.x * a.y)) / determinant,
+  ];
+  const horizontal = matrix('x');
+  const vertical = matrix('y');
+  const centerX = (p.x + q.x + r.x) / 3;
+  const centerY = (p.y + q.y + r.y) / 3;
+  context.save();
+  context.beginPath();
+  for (let index = 0; index < 3; index += 1) {
+    const point = destination[index];
+    const dx = point.x - centerX;
+    const dy = point.y - centerY;
+    const length = Math.hypot(dx, dy) || 1;
+    const x = point.x + dx / length * bleed;
+    const y = point.y + dy / length * bleed;
+    if (index === 0) context.moveTo(x, y);
+    else context.lineTo(x, y);
+  }
+  context.closePath();
+  context.clip();
+  context.globalAlpha = shade;
+  context.transform(horizontal[0], vertical[0], horizontal[1], vertical[1], horizontal[2], vertical[2]);
+  context.drawImage(texture, 0, 0);
+  context.restore();
+}
+
+function drawButterfly(context, texture, butterfly, span, time, still, cell) {
+  const { width, height, wings, body } = texture;
+  const burst = still ? 0 : 0.16 + 0.84 * smoothstep(-0.4, 0.65, Math.sin(time * 1.16 + butterfly.phase));
+  const pitch = still ? 0.14 : 0.21 + Math.sin(time * 0.63 + butterfly.phase) * 0.07 + butterfly.vy * 0.001;
+  const yaw = still ? 0 : Math.sin(time * 0.43 + butterfly.phase) * 0.075;
+  const cosRoll = Math.cos(butterfly.angle);
+  const sinRoll = Math.sin(butterfly.angle);
+  const breathing = still ? 1 : 1 + Math.sin(time * 0.41 + butterfly.phase) * 0.035;
+  const size = span * breathing;
+
+  function project(source, side) {
+    let x = source.x / width - 0.5;
+    let y = (source.y - height * 0.5) / width;
+    const row = source.y / height;
+    // The trailing edge follows the leading edge, rather than scaling a flat image.
+    const lag = smoothstep(0.35, 0.88, row) * 0.5;
+    const beat = Math.sin(butterfly.beat - lag + side * 0.09);
+    const fold = still ? 0.16 : 0.19 + burst * (0.44 + 0.43 * beat);
+    const flex = Math.pow(Math.abs(x) * 2, 2) * burst * Math.cos(butterfly.beat - lag) * 0.09;
+    const angle = fold + flex;
+    let z = Math.abs(x) * Math.sin(angle);
+    x *= Math.cos(angle);
+    y += Math.abs(x) * burst * Math.sin(butterfly.beat - lag) * 0.025;
+    const pitchedY = y * Math.cos(pitch) - z * Math.sin(pitch);
+    z = y * Math.sin(pitch) + z * Math.cos(pitch);
+    const turnedX = x * Math.cos(yaw) + z * Math.sin(yaw);
+    z = z * Math.cos(yaw) - x * Math.sin(yaw);
+    const perspective = 2.8 / (2.8 - z);
+    const screenX = turnedX * size * perspective;
+    const screenY = pitchedY * size * perspective;
+    return {
+      x: butterfly.x + screenX * cosRoll - screenY * sinRoll,
+      y: butterfly.y + screenX * sinRoll + screenY * cosRoll,
+    };
   }
 
-  context.strokeStyle = palette.spot;
-  context.lineWidth = 4;
-  context.lineCap = 'round';
+  const columns = 5;
+  const rows = 7;
   for (const side of [-1, 1]) {
-    context.beginPath();
-    context.moveTo(side * 5, -43);
-    context.quadraticCurveTo(side * 12, -91, side * 35, -115);
-    context.stroke();
-    context.beginPath();
-    context.ellipse(side * 35, -115, 4, 6, side * 0.4, 0, TAU);
-    context.fillStyle = palette.spot;
-    context.fill();
+    const start = side === -1 ? 0 : width / 2;
+    const vertices = [];
+    for (let row = 0; row <= rows; row += 1) {
+      for (let column = 0; column <= columns; column += 1) {
+        const source = { x: start + column / columns * width / 2, y: row / rows * height };
+        vertices.push({ source, destination: project(source, side) });
+      }
+    }
+    const light = still ? 1 : 0.93 + 0.07 * Math.cos(butterfly.beat + side * 0.4) * burst;
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const index = row * (columns + 1) + column;
+        const corners = [vertices[index], vertices[index + 1], vertices[index + columns + 1], vertices[index + columns + 2]];
+        for (const triangle of [[0, 1, 2], [1, 3, 2]]) {
+          drawTriangle(context, wings, triangle.map(corner => corners[corner].source), triangle.map(corner => corners[corner].destination), cell * 0.46, light);
+        }
+      }
+    }
   }
-  const body = context.createLinearGradient(-11, 0, 11, 0);
-  body.addColorStop(0, palette.vein);
-  body.addColorStop(0.45, palette.edge);
-  body.addColorStop(0.7, palette.spot);
-  body.addColorStop(1, palette.root);
-  context.fillStyle = body;
-  context.beginPath();
-  context.ellipse(0, 26, 9, 67, 0, 0, TAU);
-  context.fill();
-  context.beginPath();
-  context.ellipse(0, -22, 13, 28, 0, 0, TAU);
-  context.fill();
-  context.beginPath();
-  context.ellipse(0, -52, 9, 10, 0, 0, TAU);
-  context.fill();
+  context.save();
+  context.translate(butterfly.x, butterfly.y);
+  context.rotate(butterfly.angle);
+  context.scale(size / width, size / width * Math.cos(pitch));
+  context.drawImage(body, -width / 2, -height / 2);
   context.restore();
 }
 
 export function initButterflies(canvas = document.querySelector('#butterfly-field')) {
   if (!canvas) return () => {};
   const context = canvas.getContext('2d', { alpha: true });
-  const sample = document.createElement('canvas');
+  const sample = makeCanvas(1, 1);
   const sampler = sample.getContext('2d', { willReadFrequently: true });
   if (!context || !sampler) return () => {};
-  const wings = PALETTES.map(palette => [makeWing(palette, true), makeWing(palette, false)]);
-  if (wings.some(pair => pair.some(wing => !wing))) return () => {};
   const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const butterflies = [0.3, 2.7].map(phase => ({ phase, beat: phase, x: 0, y: 0, vx: 0, vy: 0, angle: 0, initialized: false }));
+  const pointer = { active: false, x: 0, y: 0, vx: 0, vy: 0, last: 0 };
+  let textures = null;
   let width = 0;
   let height = 0;
   let cell = 6.8;
@@ -142,32 +239,105 @@ export function initButterflies(canvas = document.querySelector('#butterfly-fiel
   let lastFrame = 0;
   let time = 0;
   let disposed = false;
+  let flowX = new Float32Array(0);
+  let flowY = new Float32Array(0);
+  let speedX = new Float32Array(0);
+  let speedY = new Float32Array(0);
 
-  function paint() {
-    if (!width || !height) return;
+  function updateFlight(dt, still) {
     const portrait = width < 810 && height > width;
+    butterflies.forEach((butterfly, index) => {
+      const phase = butterfly.phase;
+      const homeX = width * (index ? 0.79 : portrait ? 0.22 : 0.205);
+      const homeY = height * (index ? portrait ? 0.33 : height < 500 ? 0.4 : 0.28 : 0.72);
+      const driftX = still ? 0 : (Math.sin(time * 0.31 + phase) + Math.sin(time * 0.67 + phase) * 0.24) * Math.min(30, width * 0.033);
+      const driftY = still ? 0 : (Math.cos(time * 0.39 + phase) + Math.sin(time * 0.83 + phase) * 0.22) * Math.min(23, height * 0.03);
+      let targetX = homeX + driftX;
+      let targetY = homeY + driftY;
+      if (pointer.active && !still) {
+        const dx = butterfly.x - pointer.x;
+        const dy = butterfly.y - pointer.y;
+        const distance = Math.hypot(dx, dy);
+        const influence = Math.pow(Math.max(0, 1 - distance / Math.min(240, width * 0.3)), 2);
+        targetX += dx / Math.max(1, distance) * influence * 11;
+        targetY += dy / Math.max(1, distance) * influence * 11;
+      }
+      if (!butterfly.initialized || still) {
+        butterfly.x = targetX;
+        butterfly.y = targetY;
+        butterfly.vx = 0;
+        butterfly.vy = 0;
+        butterfly.initialized = true;
+      } else {
+        butterfly.vx += ((targetX - butterfly.x) * 3.2 - butterfly.vx * 2.7) * dt;
+        butterfly.vy += ((targetY - butterfly.y) * 3.2 - butterfly.vy * 2.7) * dt;
+        butterfly.x += butterfly.vx * dt;
+        butterfly.y += butterfly.vy * dt;
+      }
+      const baseAngle = index ? 0.3 : -0.24;
+      const angle = baseAngle + (still ? 0 : Math.sin(time * 0.37 + phase) * 0.085 + clamp(butterfly.vx * 0.008, -0.14, 0.14));
+      butterfly.angle += (angle - butterfly.angle) * (still || !dt ? 1 : 1 - Math.exp(-3.5 * dt));
+      butterfly.beat += dt * TAU * (3.25 + Math.sin(time * 0.7 + phase) * 0.55);
+    });
+  }
+
+  function paint(dt = 0) {
+    if (!width || !height || !textures) return;
     const still = preference.matches;
-    const drift = still ? 0 : Math.sin(time * 0.38) * Math.min(18, width * 0.014);
+    const portrait = width < 810 && height > width;
+    updateFlight(dt, still);
     sampler.setTransform(sample.width / width, 0, 0, sample.height / height, 0, 0);
     sampler.clearRect(0, 0, width, height);
-    const span = portrait ? Math.min(width * 0.57, 310) : Math.min(width * 0.37, height * 0.77, 620);
-    drawButterfly(sampler, wings[0], PALETTES[0], width * (portrait ? 0.22 : 0.205) + drift, height * 0.72 + drift * 0.6, span, -0.24, time, 0.2, still);
-    drawButterfly(sampler, wings[1], PALETTES[1], width * 0.79 - drift * 0.7, height * (portrait ? 0.33 : height < 500 ? 0.4 : 0.28) - drift, span * 0.91, 0.34, time, 2.5, still);
+    const span = portrait ? Math.min(width * 0.62, 330) : Math.min(width * 0.39, height * 0.79, 640);
+    butterflies.forEach((butterfly, index) => drawButterfly(sampler, textures[index], butterfly, span * (index ? 0.91 : 1), time, still, cell));
 
     const pixels = sampler.getImageData(0, 0, sample.width, sample.height).data;
     context.clearRect(0, 0, width, height);
     const spacingX = width / sample.width;
     const spacingY = height / sample.height;
+    const radius = Math.min(180, Math.max(95, width * 0.14));
+    pointer.vx *= Math.exp(-dt * 8);
+    pointer.vy *= Math.exp(-dt * 8);
     for (let row = 0; row < sample.height; row += 1) {
       for (let column = 0; column < sample.width; column += 1) {
-        const offset = (row * sample.width + column) * 4;
-        const alpha = pixels[offset + 3] / 255;
-        if (alpha < 0.08) continue;
-        const brightness = Math.max(pixels[offset], pixels[offset + 1], pixels[offset + 2]) / 255;
-        const radius = cell * (0.28 + brightness * 0.15) * Math.sqrt(alpha);
+        const index = row * sample.width + column;
+        const x = (column + 0.5) * spacingX;
+        const y = (row + 0.5) * spacingY;
+        if (!still && dt) {
+          const dx = x - pointer.x;
+          const dy = y - pointer.y;
+          const distance = dx * dx + dy * dy;
+          const influence = pointer.active && distance < radius * radius * 5 ? Math.exp(-distance / (radius * radius * 0.72)) : 0;
+          const targetX = influence * (clamp(pointer.vx * 0.045, -34, 34) + Math.sin(y * 0.025 + time * 2.1) * 5);
+          const targetY = influence * (clamp(pointer.vy * 0.045, -34, 34) + Math.cos(x * 0.023 - time * 1.8) * 5);
+          speedX[index] += ((targetX - flowX[index]) * 54 - speedX[index] * 10) * dt;
+          speedY[index] += ((targetY - flowY[index]) * 54 - speedY[index] * 10) * dt;
+          flowX[index] += speedX[index] * dt;
+          flowY[index] += speedY[index] * dt;
+        }
+        // Distort the sampled surface; the visible dots stay on a regular grid.
+        const sampleX = clamp(column + (still ? 0 : flowX[index] / spacingX), 0, sample.width - 1);
+        const sampleY = clamp(row + (still ? 0 : flowY[index] / spacingY), 0, sample.height - 1);
+        const left = Math.floor(sampleX);
+        const top = Math.floor(sampleY);
+        const mixX = sampleX - left;
+        const mixY = sampleY - top;
+        const topLeft = (top * sample.width + left) * 4;
+        const topRight = (top * sample.width + Math.min(left + 1, sample.width - 1)) * 4;
+        const bottomLeft = (Math.min(top + 1, sample.height - 1) * sample.width + left) * 4;
+        const bottomRight = (Math.min(top + 1, sample.height - 1) * sample.width + Math.min(left + 1, sample.width - 1)) * 4;
+        const channel = offset => (pixels[topLeft + offset] * (1 - mixX) + pixels[topRight + offset] * mixX) * (1 - mixY)
+          + (pixels[bottomLeft + offset] * (1 - mixX) + pixels[bottomRight + offset] * mixX) * mixY;
+        const alpha = channel(3) / 255;
+        if (alpha < 0.07) continue;
+        const red = channel(0);
+        const green = channel(1);
+        const blue = channel(2);
+        const brightness = Math.max(red, green, blue) / 255;
+        const dotRadius = cell * (0.255 + brightness * 0.065) * Math.sqrt(alpha);
         context.beginPath();
-        context.arc((column + 0.5) * spacingX, (row + 0.5) * spacingY, radius, 0, TAU);
-        context.fillStyle = `rgb(${pixels[offset]} ${pixels[offset + 1]} ${pixels[offset + 2]})`;
+        context.arc(x, y, dotRadius, 0, TAU);
+        context.fillStyle = `rgb(${Math.round(red)} ${Math.round(green)} ${Math.round(blue)})`;
         context.fill();
       }
     }
@@ -176,10 +346,11 @@ export function initButterflies(canvas = document.querySelector('#butterfly-fiel
   function tick(now) {
     frame = 0;
     if (disposed || !visible || document.hidden || preference.matches) return;
-    if (now - lastFrame >= 1000 / 30) {
-      time += Math.min((now - lastFrame) / 1000, 0.05);
+    if (now - lastFrame >= 1000 / (width < 810 ? 30 : 60) - 1) {
+      const dt = Math.min((now - lastFrame) / 1000, 0.05);
+      time += dt;
       lastFrame = now;
-      paint();
+      paint(dt);
     }
     frame = requestAnimationFrame(tick);
   }
@@ -196,21 +367,58 @@ export function initButterflies(canvas = document.querySelector('#butterfly-fiel
 
   function resize() {
     const bounds = canvas.getBoundingClientRect();
-    width = Math.round(bounds.width);
-    height = Math.round(bounds.height);
-    if (!width || !height) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    cell = width < 810 ? 5 : 6.8;
+    const nextWidth = Math.round(bounds.width);
+    const nextHeight = Math.round(bounds.height);
+    if (!nextWidth || !nextHeight || (nextWidth === width && nextHeight === height)) return;
+    width = nextWidth;
+    height = nextHeight;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    cell = Math.max(width < 810 ? 4.6 : 6.8, Math.sqrt(width * height / 34000));
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
     sample.width = Math.max(1, Math.ceil(width / cell));
     sample.height = Math.max(1, Math.ceil(height / cell));
+    const count = sample.width * sample.height;
+    flowX = new Float32Array(count);
+    flowY = new Float32Array(count);
+    speedX = new Float32Array(count);
+    speedY = new Float32Array(count);
+    butterflies.forEach(butterfly => { butterfly.initialized = false; });
+    pointer.active = false;
     paint();
   }
 
+  function movePointer(event) {
+    if (event.pointerType === 'touch' || preference.matches || !visible) return;
+    const bounds = canvas.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    const now = performance.now();
+    const active = x >= 0 && x <= width && y >= 0 && y <= height;
+    if (active && pointer.active) {
+      const dt = Math.max(0.008, (now - pointer.last) / 1000);
+      pointer.vx = clamp((x - pointer.x) / dt, -1000, 1000);
+      pointer.vy = clamp((y - pointer.y) / dt, -1000, 1000);
+    } else {
+      pointer.vx = 0;
+      pointer.vy = 0;
+    }
+    pointer.x = x;
+    pointer.y = y;
+    pointer.last = now;
+    pointer.active = active;
+  }
+
+  function leavePointer(event) {
+    if (!event.relatedTarget) pointer.active = false;
+  }
+
+  function clearPointer() { pointer.active = false; }
+
   const observer = new IntersectionObserver(entries => {
     visible = entries.some(entry => entry.isIntersecting);
+    if (!visible) clearPointer();
     resume();
   }, { rootMargin: '80px' });
   const resizeObserver = new ResizeObserver(resize);
@@ -218,7 +426,22 @@ export function initButterflies(canvas = document.querySelector('#butterfly-fiel
   resizeObserver.observe(canvas);
   document.addEventListener('visibilitychange', resume);
   preference.addEventListener('change', resume);
+  window.addEventListener('pointermove', movePointer, { passive: true });
+  window.addEventListener('pointerout', leavePointer, { passive: true });
+  window.addEventListener('scroll', clearPointer, { passive: true });
   resize();
+  canvas.dataset.renderer = 'loading';
+  loadTextures().then(result => {
+    if (disposed) return;
+    textures = result;
+    canvas.dataset.renderer = 'texture-mesh';
+    resume();
+  }).catch(() => {
+    if (disposed) return;
+    textures = fallbackTextures();
+    canvas.dataset.renderer = 'fallback';
+    resume();
+  });
 
   return () => {
     disposed = true;
@@ -227,5 +450,8 @@ export function initButterflies(canvas = document.querySelector('#butterfly-fiel
     resizeObserver.disconnect();
     document.removeEventListener('visibilitychange', resume);
     preference.removeEventListener('change', resume);
+    window.removeEventListener('pointermove', movePointer);
+    window.removeEventListener('pointerout', leavePointer);
+    window.removeEventListener('scroll', clearPointer);
   };
 }

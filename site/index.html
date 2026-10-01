@@ -7,14 +7,10 @@
   <meta name="color-scheme" content="dark" />
   <meta name="theme-color" content="#000000" />
   <title>Alex Rivkin</title>
-  <link rel="preload" href="/fonts/PPNeueMontrealTT-Bold.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/fonts/PPNeueMontreal-Bold.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/images/alex-rivkin-idle.png" as="image" />
-  <link rel="preload" href="/images/alex-rivkin-jump.png" as="image" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23efee74' d='M13 3h6v7h3v8h3v7h4v4H3v-4h4v-7h3v-8h3z'/%3E%3Cpath fill='%23fff' d='M10 12h12v5H10zM7 21h18v4H7z'/%3E%3C/svg%3E" />
-  <style>html { background: #000; }</style>
-  <link rel="stylesheet" href="/styles.css" />
   <script>
+    // Start at the hero before the browser restores scroll or initializes the ladder.
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     document.documentElement.classList.add('js');
     window.setTimeout(() => {
       if (!document.documentElement.classList.contains('is-ready')) {
@@ -22,6 +18,13 @@
       }
     }, 4000);
   </script>
+  <link rel="preload" href="/fonts/PPNeueMontrealTT-Bold.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/PPNeueMontreal-Bold.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/images/alex-rivkin-idle.png" as="image" />
+  <link rel="preload" href="/images/alex-rivkin-jump.png" as="image" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23efee74' d='M13 3h6v7h3v8h3v7h4v4H3v-4h4v-7h3v-8h3z'/%3E%3Cpath fill='%23fff' d='M10 12h12v5H10zM7 21h18v4H7z'/%3E%3C/svg%3E" />
+  <style>html { background: #000; }</style>
+  <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header class="contact-header" aria-label="Contact">

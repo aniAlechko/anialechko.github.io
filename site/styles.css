@@ -27,6 +27,7 @@
   --character-width: calc(var(--character-height) * 444 / 1180);
   --jump-height: clamp(40px, 10svh, 90px);
   --stage-gap: clamp(16px, 2vw, 36px);
+  --hero-axis: calc(50% - .367 * var(--name-size));
   --name-size: calc((100vw - 2 * var(--page-edge) - var(--character-width) - 2 * var(--stage-gap)) / 6.06);
 }
 
@@ -100,7 +101,7 @@ a:hover { color: #efee74; }
   position: absolute;
   z-index: 2;
   top: 50%;
-  left: calc(50% - .367 * var(--name-size));
+  left: var(--hero-axis);
   width: var(--character-width);
   transform: translate(-50%, -50%);
 }
@@ -187,7 +188,7 @@ a:hover { color: #efee74; }
 .status { text-align: left; }
 .scroll-indicator {
   position: absolute;
-  left: 50%;
+  left: var(--hero-axis);
   bottom: 24px;
   width: 20px;
   height: 20px;
@@ -251,6 +252,7 @@ a:hover { color: #efee74; }
 @media (max-width: 809px) and (max-aspect-ratio: 6/5) {
   :root {
     --page-edge: 16px;
+    --hero-axis: 50%;
     --name-size: min(calc((100vw - 2 * var(--page-edge)) / 3.4), 14svh, 160px);
     --speech-width: clamp(212px, 29svh, 238px);
     --details-size: clamp(14px, 2svh, 17px);

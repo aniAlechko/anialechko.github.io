@@ -2,10 +2,9 @@ import { createHash } from 'node:crypto';
 import { cp, lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pageRoutes, renderPage } from './render.mjs';
 
 const projectRoot = await realpath(dirname(fileURLToPath(import.meta.url)));
-const sourceRoot = resolve(projectRoot, 'dist');
+const sourceRoot = resolve(projectRoot, 'site');
 const outputRoot = resolve(projectRoot, '_site');
 
 // One content version keeps the stylesheet and the complete module graph in sync.
@@ -37,8 +36,8 @@ function versionHtmlAssets(html) {
     (_, attribute, quote, url) => `${attribute}=${quote}${versionAssetUrl(url)}${quote}`);
 }
 
-// Render first, so an invalid source cannot erase the last successful export.
-const pages = await Promise.all(pageRoutes.map(async route => ({ route, html: await renderPage(route) })));
+// Read the page before replacing the last successful build.
+const html = await readFile(resolve(sourceRoot, 'index.html'), 'utf8');
 
 // Only the generated _site directory directly inside this repository may be removed.
 if (dirname(outputRoot) !== projectRoot || !outputRoot.startsWith(projectRoot + sep)) {
@@ -62,10 +61,6 @@ for (const entry of entries) {
 for (const asset of assets.filter(asset => asset.name.endsWith('.js'))) {
   await writeFile(resolve(outputRoot, asset.name), versionModuleImports(asset.source));
 }
-for (const { route, html } of pages) {
-  const directory = resolve(outputRoot, `.${route}`);
-  await mkdir(directory, { recursive: true });
-  await writeFile(resolve(directory, 'index.html'), versionHtmlAssets(html));
-}
+await writeFile(resolve(outputRoot, 'index.html'), versionHtmlAssets(html));
 await writeFile(resolve(outputRoot, '.nojekyll'), '');
-console.log(`Built ${pages.length} pages and shared assets in ${outputRoot}`);
+console.log(`Built portfolio in ${outputRoot}`);

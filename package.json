@@ -7,6 +7,7 @@
     "dev": "node server.mjs",
     "start": "node server.mjs",
     "build": "node build.mjs",
-    "check": "node --check server.mjs && node --check render.mjs && node --check build.mjs && node --check dist/construction-background.js && node --check dist/construction-entry.js && node --check dist/construction-descent.js && node --check dist/construction-scroll.js"
+    "check": "node --check server.mjs && node --check build.mjs && node --check site/background.js && node --check site/app.js && node --check site/avatar-ladder.js && node --check site/smooth-scroll.js",
+    "test": "node tests/ladder.test.mjs"
   }
 }

@@ -185,14 +185,28 @@ a:hover { color: #efee74; }
 }
 .hero-details p { margin: 0; }
 .status { text-align: left; }
+.scroll-indicator {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  width: 20px;
+  height: 20px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  transition: opacity .2s ease-out;
+}
+.scroll-indicator svg { display: block; width: 100%; height: 100%; }
+.hero.descent-active .scroll-indicator { opacity: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .js:not(.is-ready) .name-word, .js:not(.is-ready) .hero-details,
-.js:not(.is-ready) .character, .js:not(.is-ready) .speech { opacity: 0; }
+.js:not(.is-ready) .character, .js:not(.is-ready) .speech,
+.js:not(.is-ready) .scroll-indicator { opacity: 0; }
 .js:not(.is-ready) #hero-field { visibility: hidden; }
 .is-entering .given-name .name-word { animation: name-enter .4s cubic-bezier(.5, 0, .88, .77) 1.2s both; }
 .is-entering .family-name .name-word { animation: name-enter .4s cubic-bezier(0, .72, .56, 1) 1.6s both; }
 .is-entering .hero-details { animation: details-enter .4s cubic-bezier(.44, 0, .56, 1) 1s both; }
+.is-entering .scroll-indicator { animation: details-enter .4s ease-out 1s both; }
 .is-entering:not(.character-landed) .character {
   animation: character-jump .6s linear 2s both, character-reveal .08s linear 2s both;
 }
@@ -253,9 +267,14 @@ a:hover { color: #efee74; }
   .speech { position: relative; left: auto; bottom: auto; width: var(--speech-width); flex-shrink: 0; transform: none; }
   .hero-details { position: static; margin-top: var(--footer-gap); flex-direction: column; align-items: center; text-align: center; font-size: var(--details-size); line-height: 1.12; gap: 8px; }
   .status { text-align: center; }
+  .scroll-indicator { width: 16px; height: 16px; bottom: 8px; }
   .is-entering .given-name .name-word { animation: mobile-name-enter .4s cubic-bezier(.22, 1, .36, 1) 1s both; }
   .is-entering .family-name .name-word { animation: mobile-name-enter .4s cubic-bezier(.22, 1, .36, 1) 1.075s both; }
   @keyframes mobile-name-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+}
+
+@media (max-width: 809px) and (max-aspect-ratio: 6/5) and (max-height: 650px) {
+  .scroll-indicator { width: 12px; height: 12px; bottom: 4px; }
 }
 
 @media (max-height: 500px) and (min-aspect-ratio: 6/5) {
@@ -266,9 +285,11 @@ a:hover { color: #efee74; }
   .hero { padding-top: 132px; padding-bottom: 64px; }
   .speech { width: 212px; }
   .hero-details { font-size: 15px; inset: auto 16px 16px; }
+  .scroll-indicator { width: 16px; height: 16px; bottom: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .js .scroll-indicator { animation: none !important; transition: none; opacity: 1; }
   .js .name-word, .js .hero-details, .js .character, .js .speech { animation: none !important; opacity: 1; }
   .js .speech-word { animation: none !important; transform: none; }
   .js .character-pose--idle { opacity: 1 !important; }

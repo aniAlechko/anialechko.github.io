@@ -8,6 +8,6 @@
     "start": "node server.mjs",
     "build": "node build.mjs",
     "check": "node --check server.mjs && node --check build.mjs && node --check site/background.js && node --check site/app.js && node --check site/avatar-ladder.js && node --check site/smooth-scroll.js",
-    "test": "node tests/ladder.test.mjs && node tests/smooth-scroll.test.mjs"
+    "test": "node tests/ladder.test.mjs && node tests/smooth-scroll.test.mjs && node tests/startup.test.mjs"
   }
 }

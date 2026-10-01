@@ -320,8 +320,9 @@ if (originalCanvas) {
   }
 
   function resize() {
-    width = Math.max(1, window.innerWidth);
-    height = Math.max(1, window.innerHeight);
+    const bounds = canvas.getBoundingClientRect();
+    width = Math.max(1, bounds.width);
+    height = Math.max(1, bounds.height);
     dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
@@ -395,8 +396,9 @@ if (originalCanvas) {
   document.addEventListener('hero:enter', startEntry);
   window.addEventListener('pointermove', (event) => {
     if (motionPreference.matches || !gl || event.pointerType === 'touch') return;
-    pointer.targetX = event.clientX / width;
-    pointer.targetY = 1 - event.clientY / height;
+    const bounds = canvas.getBoundingClientRect();
+    pointer.targetX = clamp((event.clientX - bounds.left) / width);
+    pointer.targetY = 1 - clamp((event.clientY - bounds.top) / height);
   }, { passive: true });
   window.addEventListener('resize', () => {
     cancelAnimationFrame(resizeFrame);

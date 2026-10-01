@@ -64,7 +64,7 @@
     <p class="visually-hidden" id="portfolio-note">Portfolio under construction. I'm putting together a new portfolio. You can contact me by email or LinkedIn.</p>
     <footer class="hero-details">
       <p>PRODUCT DESIGNER<br />BASED IN TEL AVIV</p>
-      <p class="status">UX/UI, MOBILE &amp; WEB<br />INTERACTION DESIGN</p>
+      <p class="status" aria-hidden="true"><span data-skill-anchor="ux">UX/UI</span><span>,</span> <span data-skill-anchor="mobile">MOBILE</span> <span data-skill-anchor="and">&amp;</span> <span data-skill-anchor="web">WEB</span><br /><span data-skill-anchor="interaction">INTERACTION</span> <span data-skill-anchor="design">DESIGN</span></p>
     </footer>
     <div class="scroll-indicator" role="img" aria-label="Scroll down">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
@@ -72,7 +72,23 @@
       </svg>
     </div>
   </section>
-  <div id="descent-space" aria-hidden="true"></div>
+  <section id="descent-space" aria-label="More design skills">
+    <!-- Placeholder skills for the scrolling layout preview. -->
+    <ul class="descent-skills">
+      <li class="skills-lead"><span class="skill-word" data-hero-word="ux">UX/UI<span class="skill-comma" aria-hidden="true">,</span></span></li>
+      <li class="skills-lead"><span class="skill-word" data-hero-word="mobile">MOBILE</span> <span class="skill-added">DESIGN</span><span class="skill-word skill-and" data-hero-word="and" aria-hidden="true">&amp;</span></li>
+      <li class="skills-lead"><span class="skill-word" data-hero-word="web">WEB</span> <span class="skill-added">DESIGN</span></li>
+      <li class="skills-lead"><span class="skill-word" data-hero-word="interaction">INTERACTION</span> <span class="skill-word" data-hero-word="design">DESIGN</span></li>
+      <li>USER RESEARCH</li>
+      <li>USER FLOWS</li>
+      <li>WIREFRAMES</li>
+      <li>PROTOTYPES</li>
+      <li>DESIGN SYSTEMS</li>
+      <li>JOURNEY MAPPING</li>
+      <li>USABILITY TESTING</li>
+      <li>MOTION DESIGN</li>
+    </ul>
+  </section>
   <section id="landing" class="landing" aria-labelledby="contact-title">
     <div class="contact-copy">
       <h2 id="contact-title"><span>LET'S BUILD</span><span>TOGETHER</span></h2>

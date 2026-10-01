@@ -8,6 +8,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   const speech = hero?.querySelector('.speech');
   const speechWords = [...hero?.querySelectorAll('.speech-word') || []];
   const spacer = document.querySelector('#descent-space');
+  const skills = spacer?.querySelector('.descent-skills');
   const site = document.querySelector('#landing');
   const scene = document.querySelector('#descent-scene');
   const ladder = scene?.querySelector('.descent-ladder');
@@ -41,6 +42,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   let assetTimer = 0;
   let speechAnimations = [];
   let speechRun = 0;
+  let skillsObserver;
 
   function cancelSpeechReplay() {
     speechRun++;
@@ -119,13 +121,12 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   function sizeLanding() {
     // Safari's bars change innerHeight during a swipe. Grow the landing space
     // without shortening the route or moving its endpoint under the character.
-    const minimum = Math.max(geometry.landingHeight || 0, window.innerHeight,
-      Math.ceil(geometry.top + 1249 * geometry.unit + 24));
+    const minimum = Math.max(geometry.landingHeight || 0, window.innerHeight);
     site.style.setProperty('--landing-height', `${minimum}px`);
     // CSS reserves the large viewport from the start, before Safari can clamp
     // the scroll position as its toolbar disappears.
     geometry.landingHeight = Math.max(minimum, site.getBoundingClientRect().height);
-    scene.style.height = `${geometry.total + geometry.landingHeight}px`;
+    scene.style.height = `${geometry.total + geometry.landingOffset + geometry.landingHeight}px`;
   }
 
   function measure() {
@@ -136,6 +137,9 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     }
     const bounds = original.getBoundingClientRect();
     const heroHeight = hero.getBoundingClientRect().height;
+    const requiredSkillsSpace = skills
+      ? Math.max(0, skills.getBoundingClientRect().bottom - spacer.getBoundingClientRect().top + 48)
+      : 0;
     if (bounds.height <= 0 || heroHeight <= 0) throw new Error('Avatar has no measurable size.');
     const unit = bounds.height / 1180;
     const center = bounds.left + bounds.width / 2;
@@ -144,12 +148,15 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     const transform = getComputedStyle(original).transform;
     const jumpOffset = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
     const top = bounds.top + window.scrollY - jumpOffset;
+    const landingOffset = top + 1249 * unit + 32;
     // A browser-toolbar resize is not a new layout. Keep the current pose,
     // ladder nodes, and arrival animation when the page itself has not moved.
     if (geometry && geometry.width === window.innerWidth
       && Math.abs(geometry.heroHeight - heroHeight) < 0.5
       && Math.abs(geometry.unit * 1180 - bounds.height) < 0.5
       && Math.abs(geometry.center - center) < 0.5
+      && Math.abs(geometry.requiredSkillsSpace - requiredSkillsSpace) < 0.5
+      && Math.abs(geometry.landingOffset - landingOffset) < 0.5
       && Math.abs(geometry.top - top) < 0.5) {
       sizeLanding();
       return;
@@ -158,19 +165,23 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     hideScene();
     snapNext = true;
     const pitch = 224 * unit;
-    const steps = Math.ceil(Math.max(heroHeight, window.innerHeight * 1.3) / pitch);
+    const minContactStart = Math.max(heroHeight + requiredSkillsSpace, window.innerHeight * 1.3);
+    const steps = Math.max(1, Math.ceil((minContactStart - landingOffset) / pitch));
     const total = steps * pitch;
     const xUnit = unit * 380 / 299;
     const yUnit = unit * 224 / 217;
     const foot = top + 1242 * unit;
     const ladderTop = foot - (Math.ceil(1242 / 224) + 1) * pitch - 108 * yUnit;
     const tileCount = Math.ceil((foot + total + pitch * 0.3 - ladderTop) / pitch);
-    geometry = { unit, pitch, steps, total, top, center, heroHeight, width: window.innerWidth };
+    geometry = { unit, pitch, steps, total, top, center, heroHeight, requiredSkillsSpace,
+      landingOffset, width: window.innerWidth };
 
     scene.style.setProperty('--sprite-unit', `${unit}px`);
     scene.style.setProperty('--ladder-x-unit', `${xUnit}px`);
     scene.style.setProperty('--ladder-y-unit', `${yUnit}px`);
-    spacer.style.height = `${Math.max(0, total - heroHeight)}px`;
+    // Park the avatar above contact, keeping its boundary tied to the skills
+    // content. Ordinary scrolling then carries the avatar out of the viewport.
+    spacer.style.height = `${Math.max(0, total + landingOffset - heroHeight)}px`;
     sizeLanding();
     actor.style.left = `${center - 524 * unit / 2}px`;
     actor.style.top = `${top}px`;
@@ -383,6 +394,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     window.removeEventListener('resize', resized);
     window.removeEventListener('pageshow', restored);
     reducedMotion.removeEventListener('change', resized);
+    skillsObserver?.disconnect();
     useNativeLayout();
     strip.replaceChildren();
     currentCleanup = undefined;
@@ -399,6 +411,10 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   window.addEventListener('resize', resized, { passive: true });
   window.addEventListener('pageshow', restored);
   reducedMotion.addEventListener('change', resized);
+  if (skills && typeof ResizeObserver === 'function') {
+    skillsObserver = new ResizeObserver(resized);
+    skillsObserver.observe(skills);
+  }
 
   // Reserve the route before the entrance ends, so early scrolling cannot
   // encounter a late spacer insertion when the sprites finish decoding.

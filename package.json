@@ -7,6 +7,6 @@
     "dev": "node server.mjs",
     "start": "node server.mjs",
     "build": "node build.mjs",
-    "check": "node --check server.mjs && node --check render.mjs && node --check build.mjs && node --check dist/construction-background.js && node --check dist/construction-entry.js"
+    "check": "node --check server.mjs && node --check render.mjs && node --check build.mjs && node --check dist/construction-background.js && node --check dist/construction-entry.js && node --check dist/construction-descent.js && node --check dist/construction-scroll.js"
   }
 }

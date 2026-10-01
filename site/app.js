@@ -86,10 +86,6 @@ import('./background.js').catch(error => {
   document.dispatchEvent(new CustomEvent('hero:background-ready'));
 });
 
-import('./butterflies.js').then(({ initButterflies }) => initButterflies()).catch(error => {
-  console.warn('Butterfly scene unavailable; contact links remain usable.', error);
-});
-
 await Promise.race([
   Promise.all([fontsReady, backgroundReady, characterReady]),
   new Promise(resolve => setTimeout(resolve, 2000)),

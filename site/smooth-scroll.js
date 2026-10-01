@@ -20,12 +20,22 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
 
   function restingTarget(value, sign = 0) {
     const bounded = clamp(value, maxScroll());
-    if (!route || bounded > route.total) return bounded;
-    let snapped = Math.round(bounded / route.pitch) * route.pitch;
-    // A small line-mode wheel delta must still move in its requested direction.
-    if (sign > 0 && snapped <= position + 0.4) snapped = (Math.floor(position / route.pitch) + 1) * route.pitch;
-    if (sign < 0 && snapped >= position - 0.4) snapped = (Math.ceil(position / route.pitch) - 1) * route.pitch;
-    return clamp(Math.min(snapped, route.total), maxScroll());
+    if (!route) return bounded;
+    const segments = route.segments || [{ start: 0, end: route.total }];
+    const segment = segments.find(({ start, end }) => bounded >= start && bounded <= end);
+    let destination = bounded;
+    if (segment) {
+      destination = segment.start + Math.round((bounded - segment.start) / route.pitch) * route.pitch;
+      // A small line-mode wheel delta must still move in its requested direction.
+      if (sign > 0 && destination <= position + 0.4) {
+        destination = segment.start + (Math.floor((position - segment.start) / route.pitch) + 1) * route.pitch;
+      }
+      if (sign < 0 && destination >= position - 0.4) {
+        destination = segment.start + (Math.ceil((position - segment.start) / route.pitch) - 1) * route.pitch;
+      }
+      destination = Math.max(segment.start, Math.min(destination, segment.end));
+    }
+    return clamp(destination, maxScroll());
   }
 
   function stop() {

@@ -1,6 +1,6 @@
 let currentCleanup;
 
-export function initDescent({ onInteraction = () => {}, layoutReady = Promise.resolve(), onLayout = () => {}, getScrollTarget = () => null } = {}) {
+export function initDescent({ onInteraction = () => {}, layoutReady = Promise.resolve(), onLayout = () => {}, getScrollTarget = () => null, getAboutLayout = () => null } = {}) {
   if (currentCleanup) return currentCleanup;
 
   const hero = document.querySelector('.hero');
@@ -32,6 +32,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   let snapNext = true;
   let active = false;
   let travel = 0;
+  let climbingTravel = 0;
   let lastScroll = Math.max(0, window.scrollY);
   let turnAnimation;
   let turning = false;
@@ -100,6 +101,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     active = false;
     settledEndpoint = null;
     travel = 0;
+    climbingTravel = 0;
     scene.hidden = true;
     scene.classList.remove('is-active', 'is-landed');
     hero.classList.remove('descent-active');
@@ -126,7 +128,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     // CSS reserves the large viewport from the start, before Safari can clamp
     // the scroll position as its toolbar disappears.
     geometry.landingHeight = Math.max(minimum, site.getBoundingClientRect().height);
-    scene.style.height = `${geometry.total + geometry.landingOffset + geometry.landingHeight}px`;
+    scene.style.height = `${geometry.distance + geometry.landingOffset + geometry.landingHeight}px`;
   }
 
   function measure() {
@@ -148,7 +150,15 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     const transform = getComputedStyle(original).transform;
     const jumpOffset = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
     const top = bounds.top + window.scrollY - jumpOffset;
-    const landingOffset = top + 1249 * unit + 32;
+    const pitch = 224 * unit;
+    const aboutRequest = getAboutLayout();
+    const aboutScroll = aboutRequest?.scroll || 0;
+    const aboutHold = aboutRequest?.hold || 0;
+    // Contact follows the complete About composition, without another climb
+    // or an empty viewport between the standing avatar and the footer.
+    const landingOffset = aboutRequest
+      ? Math.max(top + 1249 * unit, aboutRequest.contentBottom || 0) + 32
+      : top + 1249 * unit + 32 + 2 * pitch;
     // A browser-toolbar resize is not a new layout. Keep the current pose,
     // ladder nodes, and arrival animation when the page itself has not moved.
     if (geometry && geometry.width === window.innerWidth
@@ -157,6 +167,8 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
       && Math.abs(geometry.center - center) < 0.5
       && Math.abs(geometry.requiredSkillsSpace - requiredSkillsSpace) < 0.5
       && Math.abs(geometry.landingOffset - landingOffset) < 0.5
+      && Math.abs(geometry.aboutScroll - aboutScroll) < 0.5
+      && Math.abs(geometry.aboutHold - aboutHold) < 0.5
       && Math.abs(geometry.top - top) < 0.5) {
       sizeLanding();
       return;
@@ -164,24 +176,33 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     cancelSpeechReplay();
     hideScene();
     snapNext = true;
-    const pitch = 224 * unit;
     const minContactStart = Math.max(heroHeight + requiredSkillsSpace, window.innerHeight * 1.3);
-    const steps = Math.max(1, Math.ceil((minContactStart - landingOffset) / pitch));
-    const total = steps * pitch;
+    let steps = Math.max(1, Math.ceil((minContactStart - landingOffset) / pitch));
+    let distance = steps * pitch;
+    let total = distance;
+    let about = null;
+    let segments = [{ start: 0, end: total }];
+    if (aboutRequest) {
+      const start = Math.max(pitch, Math.ceil(aboutScroll / pitch) * pitch);
+      about = { start, end: start + Math.max(pitch, Math.ceil(aboutHold / pitch) * pitch) };
+      distance = about.end;
+      total = distance;
+      steps = Math.round(about.start / pitch);
+      segments = [{ start: 0, end: about.start }];
+    }
     const xUnit = unit * 380 / 299;
     const yUnit = unit * 224 / 217;
     const foot = top + 1242 * unit;
     const ladderTop = foot - (Math.ceil(1242 / 224) + 1) * pitch - 108 * yUnit;
-    const tileCount = Math.ceil((foot + total + pitch * 0.3 - ladderTop) / pitch);
-    geometry = { unit, pitch, steps, total, top, center, heroHeight, requiredSkillsSpace,
+    const tileCount = Math.ceil((foot + (about?.start ?? distance) + pitch * 0.3 - ladderTop) / pitch);
+    geometry = { unit, pitch, steps, total, distance, about, aboutScroll, aboutHold, segments, top, center, heroHeight, requiredSkillsSpace,
       landingOffset, width: window.innerWidth };
 
     scene.style.setProperty('--sprite-unit', `${unit}px`);
     scene.style.setProperty('--ladder-x-unit', `${xUnit}px`);
     scene.style.setProperty('--ladder-y-unit', `${yUnit}px`);
-    // Park the avatar above contact, keeping its boundary tied to the skills
-    // content. Ordinary scrolling then carries the avatar out of the viewport.
-    spacer.style.height = `${Math.max(0, total + landingOffset - heroHeight)}px`;
+    const skillsEnd = distance + landingOffset;
+    spacer.style.height = `${Math.max(0, skillsEnd - heroHeight)}px`;
     sizeLanding();
     actor.style.left = `${center - 524 * unit / 2}px`;
     actor.style.top = `${top}px`;
@@ -203,7 +224,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
       fragment.append(tile);
     }
     strip.replaceChildren(fragment);
-    onLayout({ pitch, total });
+    onLayout({ pitch, total, segments, about });
   }
 
   function turnTo(pose, destination, state, swap, finish) {
@@ -296,7 +317,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
         setState('returned');
         if (window.scrollY <= 0.5) hideScene();
       } else {
-        setState('landed');
+        setState(endpoint === 'about' ? 'about' : 'landed');
       }
       // The remaining easing pixels must not activate another turn.
       settledEndpoint = endpoint;
@@ -306,7 +327,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
 
   function placeActor() {
     actor.style.top = `${geometry.top + travel}px`;
-    const step = clamp(Math.round(travel / geometry.pitch), 0, geometry.steps);
+    const step = clamp(Math.round(climbingTravel / geometry.pitch), 0, geometry.steps);
     scene.classList.remove('is-landed');
     setPose(step % 2 ? 'b' : 'a');
     setState('climbing');
@@ -329,7 +350,12 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
       const endpointMargin = Math.min(geometry.pitch * 0.2, 12);
       const headingTop = target === null ? !descending : target <= 0.5;
       const headingBottom = target === null ? !reversing : target >= bottom - 0.5;
-      travel = clamp(scroll, 0, geometry.total);
+      climbingTravel = geometry.segments.reduce((sum, segment) =>
+        sum + clamp(scroll - segment.start, 0, segment.end - segment.start), 0);
+      // About is a pinned composition: hold the standing pose in the viewport
+      // while the page consumes this interval, without advancing a climbing step.
+      travel = climbingTravel + (geometry.about
+        ? clamp(scroll - geometry.about.start, 0, geometry.about.end - geometry.about.start) : 0);
       actor.style.top = `${geometry.top + travel}px`;
       // Begin during the visible arrival, not after the exponential tail.
       // Only a target at the endpoint qualifies; ordinary rung stops do not.
@@ -345,10 +371,21 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
         snapNext = false;
         return;
       }
-      const step = clamp(Math.round(scroll / geometry.pitch), 0, geometry.steps);
+      const step = clamp(Math.round(climbingTravel / geometry.pitch), 0, geometry.steps);
       // Page momentum owns the timing. Follow its actual position throughout
       // each rung instead of restarting a separate tween on every scroll event.
       if (!active) activate(!snapNext && step <= 3);
+      if (geometry.about) {
+        const { start } = geometry.about;
+        const targetingAbout = target !== null && target >= start - 0.5;
+        const margin = turnDestination === 'about' || settledEndpoint === 'about'
+          ? clamp(geometry.pitch * 0.5, 12, 24) : targetingAbout ? endpointMargin : 0.5;
+        if (scroll >= start - margin) {
+          if (turnDestination !== 'about' && settledEndpoint !== 'about') arriveAt('about');
+          snapNext = false;
+          return;
+        }
+      }
       const nearBottom = bottom - scroll <= endpointMargin && headingBottom
         && (target !== null || turnDestination === 'bottom' || settledEndpoint === 'bottom');
       // Keep the landing through small native-scroll rebounds. Only a real
@@ -360,7 +397,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
         snapNext = false;
         return;
       }
-      if (turnDestination === 'top' || turnDestination === 'bottom' || settledEndpoint) startTurn();
+      if (['top', 'about', 'bottom'].includes(turnDestination) || settledEndpoint) startTurn();
       settledEndpoint = null;
       if (turning || deploymentFrame) return;
       snapNext = false;
@@ -392,6 +429,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     clearTimeout(assetTimer);
     window.removeEventListener('scroll', schedule);
     window.removeEventListener('resize', resized);
+    window.removeEventListener('skills:layout', resized);
     window.removeEventListener('pageshow', restored);
     reducedMotion.removeEventListener('change', resized);
     skillsObserver?.disconnect();
@@ -409,6 +447,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   setState('idle');
   window.addEventListener('scroll', schedule, { passive: true });
   window.addEventListener('resize', resized, { passive: true });
+  window.addEventListener('skills:layout', resized);
   window.addEventListener('pageshow', restored);
   reducedMotion.addEventListener('change', resized);
   if (skills && typeof ResizeObserver === 'function') {

@@ -4,26 +4,6 @@ import { initSmoothScroll } from './smooth-scroll.js';
 const page = document.documentElement;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
-const clock = document.querySelector('#local-time');
-if (clock) {
-  const clockFormat = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hour12: true,
-  });
-  let clockTimer;
-  const updateClock = () => {
-    clearTimeout(clockTimer);
-    if (document.hidden) return;
-    const now = new Date();
-    const time = clockFormat.format(now);
-    clock.textContent = time.replace(':', ' : ');
-    clock.dateTime = now.toISOString();
-    clock.setAttribute('aria-label', `${time} in Tel Aviv`);
-    clockTimer = setTimeout(updateClock, 60000 - now.getTime() % 60000);
-  };
-  document.addEventListener('visibilitychange', updateClock);
-  updateClock();
-}
-
 const backgroundReady = new Promise(resolve => {
   if (page.dataset.backgroundReady === 'true') return resolve();
   const ready = () => { clearTimeout(timeout); resolve(); };

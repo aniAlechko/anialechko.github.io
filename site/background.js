@@ -27,6 +27,7 @@ if (originalCanvas) {
   let entryStarted = false;
   let entryRequested = document.documentElement.dataset.heroEntered === 'true';
   let ready = false;
+  let visible = false;
   const trails = new Float32Array(TRAIL_COUNT * 4);
   const pointer = { x: 0.5, y: 0.5, targetX: 0.5, targetY: 0.5 };
   const sourceCanvas = document.createElement('canvas');
@@ -351,6 +352,8 @@ if (originalCanvas) {
   }
 
   function animate(time) {
+    frame = 0;
+    if (!ready || !visible || document.hidden) return;
     frame = requestAnimationFrame(animate);
     if (lastTime && time - lastTime < 1000 / 60 - 0.75) return;
     const delta = lastTime ? Math.min((time - lastTime) / 1000, 0.08) : 0;
@@ -364,7 +367,7 @@ if (originalCanvas) {
     cancelAnimationFrame(frame);
     frame = 0;
     lastTime = 0;
-    if (!ready || document.hidden) return;
+    if (!ready || !visible || document.hidden) return;
     if (motionPreference.matches) {
       elapsed = 0;
       introStart = null;
@@ -393,9 +396,18 @@ if (originalCanvas) {
     }
   }
 
+  // Observe the section so replacing a lost WebGL canvas keeps this lifecycle.
+  const heroVisibility = new IntersectionObserver(entries => {
+    const nextVisible = entries.some(entry => entry.isIntersecting);
+    if (nextVisible === visible) return;
+    visible = nextVisible;
+    updatePlayback();
+  });
+  heroVisibility.observe(originalCanvas.closest('.hero') || originalCanvas.parentElement);
+
   document.addEventListener('hero:enter', startEntry);
   window.addEventListener('pointermove', (event) => {
-    if (motionPreference.matches || !gl || event.pointerType === 'touch') return;
+    if (motionPreference.matches || !visible || !gl || event.pointerType === 'touch') return;
     const bounds = canvas.getBoundingClientRect();
     pointer.targetX = clamp((event.clientX - bounds.left) / width);
     pointer.targetY = 1 - clamp((event.clientY - bounds.top) / height);

@@ -310,12 +310,13 @@ a:hover { color: #efee74; }
 }
 #butterfly-field {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  right: 0;
+  bottom: calc(100% + 18px);
+  width: calc(100vw - 2 * var(--page-edge));
+  height: min(27svh, max(110px, calc(50svh - 200px)));
   pointer-events: none;
 }
-.footer-copy {
+.contact-copy {
   position: absolute;
   top: 50%;
   right: var(--page-edge);
@@ -323,15 +324,15 @@ a:hover { color: #efee74; }
   transform: translateY(-50%);
   text-align: right;
 }
-.footer-copy h2 {
+.contact-copy h2 {
   margin: 0;
   font-family: 'Neue Montreal Display', Arial, sans-serif;
   font-size: clamp(48px, 7.3vw, 150px);
   line-height: .9;
   letter-spacing: -.025em;
 }
-.footer-copy h2 span { display: block; white-space: nowrap; }
-.footer-contact {
+.contact-copy h2 span { display: block; white-space: nowrap; }
+.contact-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -346,15 +347,18 @@ a:hover { color: #efee74; }
   letter-spacing: -.035em;
   text-decoration: none;
 }
-.footer-contact svg { flex: none; width: 24px; height: 24px; }
+.contact-link svg { flex: none; width: 24px; height: 24px; }
 @media (max-width: 809px) and (max-aspect-ratio: 6/5) {
-  .footer-copy { inset: 0 var(--page-edge); width: auto; transform: none; text-align: center; }
-  .footer-copy h2 { position: absolute; top: clamp(80px, 14svh, 150px); width: 100%; font-size: min(14vw, 8svh); }
-  .footer-contact { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); margin: 0; white-space: nowrap; }
+  .contact-copy { --contact-heading-top: clamp(190px, 30svh, 270px); inset: 0 var(--page-edge); width: auto; transform: none; text-align: center; }
+  #butterfly-field { top: 64px; bottom: auto; width: 100%; height: calc(var(--contact-heading-top) - 82px); }
+  .contact-copy h2 { position: absolute; top: var(--contact-heading-top); width: 100%; font-size: min(14vw, 8svh); }
+  .contact-link { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); margin: 0; white-space: nowrap; }
 }
 @media (max-height: 500px) and (min-aspect-ratio: 6/5) {
-  .footer-copy h2 { font-size: 7.1vw; }
-  .footer-contact { min-height: 44px; margin-top: 20px; }
+  .contact-copy { top: 62%; }
+  #butterfly-field { height: min(20svh, 90px); }
+  .contact-copy h2 { font-size: 7.1vw; }
+  .contact-link { min-height: 44px; margin-top: 20px; }
 }
 .descent-scene {
   position: absolute;

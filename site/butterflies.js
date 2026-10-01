@@ -158,8 +158,8 @@ function drawTriangle(context, texture, source, destination, bleed, shade) {
 function drawButterfly(context, texture, butterfly, span, time, still, cell) {
   const { width, height, wings, body } = texture;
   const burst = still ? 0 : 0.16 + 0.84 * smoothstep(-0.4, 0.65, Math.sin(time * 1.16 + butterfly.phase));
-  const pitch = still ? 0.14 : 0.21 + Math.sin(time * 0.63 + butterfly.phase) * 0.07 + butterfly.vy * 0.001;
-  const yaw = still ? 0 : Math.sin(time * 0.43 + butterfly.phase) * 0.075;
+  const pitch = still ? 0.14 : 0.21 + Math.sin(time * 0.63 + butterfly.phase) * 0.07 + butterfly.pace * 0.04;
+  const yaw = still ? 0 : butterfly.bank + Math.sin(time * 0.43 + butterfly.phase) * 0.045;
   const cosRoll = Math.cos(butterfly.angle);
   const sinRoll = Math.sin(butterfly.angle);
   const breathing = still ? 1 : 1 + Math.sin(time * 0.41 + butterfly.phase) * 0.035;
@@ -221,6 +221,45 @@ function drawButterfly(context, texture, butterfly, span, time, still, cell) {
   context.restore();
 }
 
+// Closed curves carry each butterfly through the whole footer. Catmull-Rom
+// tangents join continuously, so a new lap never resets its position or heading.
+const FLIGHT_PATH = [
+  [0.18, 0.78], [0.12, 0.44], [0.29, 0.15], [0.60, 0.12],
+  [0.85, 0.32], [0.88, 0.68], [0.68, 0.87], [0.38, 0.88],
+];
+
+function flightPoint(path, progress, width, height) {
+  const segment = Math.floor(progress);
+  const t = progress - segment;
+  const point = offset => path[((segment + offset) % path.length + path.length) % path.length];
+  const [a, b, c, d] = [-1, 0, 1, 2].map(point);
+  const axis = (index, extent) => {
+    const linear = c[index] - a[index];
+    const quadratic = 2 * a[index] - 5 * b[index] + 4 * c[index] - d[index];
+    const cubic = -a[index] + 3 * b[index] - 3 * c[index] + d[index];
+    return {
+      position: (2 * b[index] + linear * t + quadratic * t * t + cubic * t * t * t) * extent * 0.5,
+      tangent: (linear + 2 * quadratic * t + 3 * cubic * t * t) * extent * 0.5,
+    };
+  };
+  const x = axis(0, width);
+  const y = axis(1, height);
+  return { x: x.position, y: y.position, dx: x.tangent, dy: y.tangent };
+}
+
+function territoryPoint(progress, index, width, height) {
+  const point = flightPoint(FLIGHT_PATH, progress + index * FLIGHT_PATH.length / 2, 1, 1);
+  const portrait = width < 810 && height > width;
+  const horizontal = index ? -0.30 : 0.30;
+  const vertical = portrait ? 0.30 : 1;
+  return {
+    x: ((index ? 0.94 : 0.06) + point.x * horizontal) * width,
+    y: ((portrait ? index ? 0.11 : 0.61 : 0) + point.y * vertical) * height,
+    dx: point.dx * horizontal * width,
+    dy: point.dy * vertical * height,
+  };
+}
+
 export function initButterflies(canvas = document.querySelector('#butterfly-field')) {
   if (!canvas) return () => {};
   const context = canvas.getContext('2d', { alpha: true });
@@ -228,7 +267,10 @@ export function initButterflies(canvas = document.querySelector('#butterfly-fiel
   const sampler = sample.getContext('2d', { willReadFrequently: true });
   if (!context || !sampler) return () => {};
   const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const butterflies = [0.3, 2.7].map(phase => ({ phase, beat: phase, x: 0, y: 0, vx: 0, vy: 0, angle: 0, initialized: false }));
+  const butterflies = [0.3, 2.7].map(phase => ({
+    phase, beat: phase, x: 0, y: 0, vx: 0, vy: 0,
+    offsetX: 0, offsetY: 0, angle: 0, bank: 0, pace: 1, initialized: false,
+  }));
   const pointer = { active: false, x: 0, y: 0, vx: 0, vy: 0, last: 0 };
   let textures = null;
   let width = 0;
@@ -238,6 +280,8 @@ export function initButterflies(canvas = document.querySelector('#butterfly-fiel
   let frame = 0;
   let lastFrame = 0;
   let time = 0;
+  let flightProgress = 0;
+  let flightSpan = 0;
   let disposed = false;
   let flowX = new Float32Array(0);
   let flowY = new Float32Array(0);
@@ -246,15 +290,30 @@ export function initButterflies(canvas = document.querySelector('#butterfly-fiel
 
   function updateFlight(dt, still) {
     const portrait = width < 810 && height > width;
+    const before = territoryPoint(flightProgress, 0, width, height);
+    const companion = territoryPoint(flightProgress, 1, width, height);
+    const pace = 1 + Math.sin(time * 0.71) * 0.18 + Math.sin(time * 1.37) * 0.07;
+    const speed = clamp(Math.min(width, height) * 0.14, 42, 130) * pace;
+    if (!still) {
+      const pathSpeed = (Math.hypot(before.dx, before.dy) + Math.hypot(companion.dx, companion.dy)) / 2;
+      flightProgress = (flightProgress + dt * speed / Math.max(1, pathSpeed)) % FLIGHT_PATH.length;
+    }
     butterflies.forEach((butterfly, index) => {
       const phase = butterfly.phase;
-      const homeX = width * (index ? 0.79 : portrait ? 0.22 : 0.205);
-      const homeY = height * (index ? portrait ? 0.33 : height < 500 ? 0.4 : 0.28 : 0.72);
-      const driftX = still ? 0 : (Math.sin(time * 0.31 + phase) + Math.sin(time * 0.67 + phase) * 0.24) * Math.min(30, width * 0.033);
-      const driftY = still ? 0 : (Math.cos(time * 0.39 + phase) + Math.sin(time * 0.83 + phase) * 0.22) * Math.min(23, height * 0.03);
-      let targetX = homeX + driftX;
-      let targetY = homeY + driftY;
-      if (pointer.active && !still) {
+      if (still) {
+        butterfly.x = width * (index ? 0.79 : portrait ? 0.22 : 0.205);
+        butterfly.y = height * (index ? portrait ? 0.33 : height < 500 ? 0.4 : 0.28 : 0.72);
+        butterfly.angle = index ? 0.3 : -0.24;
+        butterfly.bank = 0;
+        butterfly.initialized = false;
+        return;
+      }
+      // Each butterfly stays in its own side of the footer throughout the lap.
+      const position = territoryPoint(flightProgress, index, width, height);
+      butterfly.pace = pace;
+      let targetX = 0;
+      let targetY = 0;
+      if (pointer.active) {
         const dx = butterfly.x - pointer.x;
         const dy = butterfly.y - pointer.y;
         const distance = Math.hypot(dx, dy);
@@ -262,34 +321,30 @@ export function initButterflies(canvas = document.querySelector('#butterfly-fiel
         targetX += dx / Math.max(1, distance) * influence * 11;
         targetY += dy / Math.max(1, distance) * influence * 11;
       }
-      if (!butterfly.initialized || still) {
-        butterfly.x = targetX;
-        butterfly.y = targetY;
-        butterfly.vx = 0;
-        butterfly.vy = 0;
-        butterfly.initialized = true;
-      } else {
-        butterfly.vx += ((targetX - butterfly.x) * 3.2 - butterfly.vx * 2.7) * dt;
-        butterfly.vy += ((targetY - butterfly.y) * 3.2 - butterfly.vy * 2.7) * dt;
-        butterfly.x += butterfly.vx * dt;
-        butterfly.y += butterfly.vy * dt;
-      }
-      const baseAngle = index ? 0.3 : -0.24;
-      const angle = baseAngle + (still ? 0 : Math.sin(time * 0.37 + phase) * 0.085 + clamp(butterfly.vx * 0.008, -0.14, 0.14));
-      butterfly.angle += (angle - butterfly.angle) * (still || !dt ? 1 : 1 - Math.exp(-3.5 * dt));
-      butterfly.beat += dt * TAU * (3.25 + Math.sin(time * 0.7 + phase) * 0.55);
+      butterfly.vx += ((targetX - butterfly.offsetX) * 14 - butterfly.vx * 7) * dt;
+      butterfly.vy += ((targetY - butterfly.offsetY) * 14 - butterfly.vy * 7) * dt;
+      butterfly.offsetX += butterfly.vx * dt;
+      butterfly.offsetY += butterfly.vy * dt;
+      const heading = Math.atan2(position.dy, position.dx) + Math.PI / 2;
+      const flutter = Math.sin(time * 2.4 + phase) * Math.min(5, width * 0.009);
+      butterfly.x = position.x + butterfly.offsetX + Math.cos(heading) * flutter;
+      butterfly.y = position.y + butterfly.offsetY + Math.sin(heading) * flutter;
+      const turn = Math.atan2(Math.sin(heading - butterfly.angle), Math.cos(heading - butterfly.angle));
+      const smoothing = 1 - Math.exp(-6 * dt);
+      butterfly.angle += butterfly.initialized ? turn * smoothing : turn;
+      butterfly.bank += (clamp(turn * 1.4, -0.32, 0.32) - butterfly.bank) * smoothing;
+      butterfly.initialized = true;
+      butterfly.beat += dt * TAU * (2.8 + butterfly.pace * 0.65 + Math.sin(time * 0.7 + phase) * 0.35);
     });
   }
 
   function paint(dt = 0) {
     if (!width || !height || !textures) return;
     const still = preference.matches;
-    const portrait = width < 810 && height > width;
     updateFlight(dt, still);
     sampler.setTransform(sample.width / width, 0, 0, sample.height / height, 0, 0);
     sampler.clearRect(0, 0, width, height);
-    const span = portrait ? Math.min(width * 0.62, 330) : Math.min(width * 0.39, height * 0.79, 640);
-    butterflies.forEach((butterfly, index) => drawButterfly(sampler, textures[index], butterfly, span * (index ? 0.91 : 1), time, still, cell));
+    butterflies.forEach((butterfly, index) => drawButterfly(sampler, textures[index], butterfly, flightSpan * (index ? 0.91 : 1), time, still, cell));
 
     const pixels = sampler.getImageData(0, 0, sample.width, sample.height).data;
     context.clearRect(0, 0, width, height);
@@ -372,6 +427,17 @@ export function initButterflies(canvas = document.querySelector('#butterfly-fiel
     if (!nextWidth || !nextHeight || (nextWidth === width && nextHeight === height)) return;
     width = nextWidth;
     height = nextHeight;
+    const portrait = width < 810 && height > width;
+    const preferredSpan = (portrait ? Math.min(width * 0.62, 330) : Math.min(width * 0.39, height * 0.79, 640)) * 0.8;
+    let clearance = Infinity;
+    for (let step = 0; step < 512; step += 1) {
+      const progress = step / 512 * FLIGHT_PATH.length;
+      const first = territoryPoint(progress, 0, width, height);
+      const second = territoryPoint(progress, 1, width, height);
+      clearance = Math.min(clearance, Math.hypot(first.x - second.x, first.y - second.y));
+    }
+    // Reserve space for open wings, turns, flutter and the mouse distortion.
+    flightSpan = Math.min(preferredSpan, Math.max(1, clearance - 100) / 1.4);
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     cell = Math.max(width < 810 ? 4.6 : 6.8, Math.sqrt(width * height / 34000));
     canvas.width = Math.round(width * dpr);

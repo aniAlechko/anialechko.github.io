@@ -375,6 +375,7 @@ a:hover { color: #efee74; }
   pointer-events: none;
 }
 .descent-scene[hidden], .descent-image[hidden], .descent-ladder-probe { display: none; }
+.descent-actor, .descent-ladder { translate: var(--descent-shift, 0px) 0; }
 .descent-ladder {
   position: absolute;
   overflow: hidden;

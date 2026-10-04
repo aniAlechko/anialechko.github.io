@@ -7,6 +7,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   const original = document.querySelector('.character');
   const speech = hero?.querySelector('.speech');
   const speechWords = [...hero?.querySelectorAll('.speech-word') || []];
+  const details = ['.hero-intro', '.status'].map(selector => hero?.querySelector(selector)).filter(Boolean);
   const stage = document.querySelector('#descent-stage');
   const scene = document.querySelector('#descent-scene');
   const ladder = scene?.querySelector('.descent-ladder');
@@ -42,6 +43,59 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   let speechRun = 0;
   let renderedPose;
   let renderedState;
+  let renderedSideProgress = null;
+
+  function resetSideLayout() {
+    scene.style.removeProperty('--descent-shift');
+    for (const detail of details) {
+      detail.style.removeProperty('translate');
+      detail.style.removeProperty('scale');
+      detail.style.removeProperty('transform-origin');
+    }
+    renderedSideProgress = null;
+  }
+
+  function measureSideLayout(bounds, unit, top, heroHeight) {
+    if (window.innerWidth > 809) return null;
+    const edge = parseFloat(getComputedStyle(hero).paddingLeft) || 16;
+    const gap = clamp(window.innerWidth * .03, 12, 24);
+    const copyLeft = window.innerWidth / 2 + gap / 2;
+    const copyWidth = window.innerWidth - edge - copyLeft;
+    const center = bounds.left + bounds.width / 2;
+    // Reserve the left edge for the widest climbing pose, independent of the hero.
+    const shift = edge + 524 * unit / 2 - center;
+    const rows = details.map(element => {
+      const rect = element.getBoundingClientRect();
+      return { element, left: rect.left, top: rect.top + window.scrollY,
+        height: rect.height, scale: Math.min(1, copyWidth / rect.width) };
+    });
+    const copyHeight = rows.reduce((height, row) => height + row.height * row.scale, 0)
+      + Math.max(0, rows.length - 1) * 8;
+    let copyTop = Math.min(rows[0]?.top ?? heroHeight, heroHeight - edge - copyHeight);
+    for (const row of rows) {
+      row.x = copyLeft - row.left;
+      row.y = copyTop - row.top;
+      copyTop += row.height * row.scale + 8;
+    }
+    // Clear the copy before it scrolls into the feet; don't change the hero's flow.
+    const clearance = (rows[0]?.top ?? heroHeight) - (top + 1249 * unit);
+    return { shift, rows, range: clamp(clearance * 2, 16, 120) };
+  }
+
+  function moveSideLayout(scroll) {
+    const layout = geometry?.sideLayout;
+    if (!layout) return;
+    const fraction = clamp(scroll / layout.range, 0, 1);
+    const progress = 1 - (1 - fraction) ** 3;
+    if (renderedSideProgress === progress) return;
+    scene.style.setProperty('--descent-shift', `${layout.shift * progress}px`);
+    for (const row of layout.rows) {
+      row.element.style.transformOrigin = 'left top';
+      row.element.style.translate = `${row.x * progress}px ${row.y * progress}px`;
+      row.element.style.scale = `${1 + (row.scale - 1) * progress}`;
+    }
+    renderedSideProgress = progress;
+  }
 
   function moveActor() {
     if (renderedTravel === travel) return;
@@ -106,6 +160,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
 
   function hideScene() {
     cancelTurn();
+    resetSideLayout();
     active = false;
     settledEndpoint = null;
     travel = 0;
@@ -165,7 +220,8 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     const ladderTop = foot - (Math.ceil(1242 / 224) + 1) * pitch - 108 * yUnit;
     const ladderEnd = total + arrivalBottom;
     const tileCount = Math.ceil((ladderEnd - ladderTop) / pitch);
-    geometry = { unit, pitch, steps, total, top, center, heroHeight,
+    const sideLayout = measureSideLayout(bounds, unit, top, heroHeight);
+    geometry = { unit, pitch, steps, total, top, center, heroHeight, sideLayout,
       arrivalBottom, width: window.innerWidth };
 
     scene.style.setProperty('--sprite-unit', `${unit}px`);
@@ -320,6 +376,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
       const headingBottom = target === null ? !reversing : target >= bottom - 0.5;
       travel = Math.min(scroll, geometry.total);
       moveActor();
+      moveSideLayout(scroll);
       // Begin during the visible arrival, not after the exponential tail.
       // Only a target at the endpoint qualifies; ordinary rung stops do not.
       const nearTop = scroll <= endpointMargin && headingTop

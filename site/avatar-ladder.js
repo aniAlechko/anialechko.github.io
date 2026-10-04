@@ -1,6 +1,12 @@
 let currentCleanup;
 
-export function initDescent({ onInteraction = () => {}, layoutReady = Promise.resolve(), onLayout = () => {}, getScrollTarget = () => null } = {}) {
+export function initDescent({
+  onInteraction = () => {},
+  layoutReady = Promise.resolve(),
+  onLayout = () => {},
+  getScrollTarget = () => null,
+  subscribeLayout,
+} = {}) {
   if (currentCleanup) return currentCleanup;
 
   const hero = document.querySelector('.hero');
@@ -44,6 +50,20 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   let renderedPose;
   let renderedState;
   let renderedSideProgress = null;
+  let resizeAnchorFrame = 0;
+  let preserveResizeMode = false;
+  let unsubscribeLayout;
+  let layoutSideProgress = null;
+
+  function setLanded(landed) {
+    if (scene.classList.contains('is-landed') === landed) return;
+    scene.classList.toggle('is-landed', landed);
+  }
+
+  function setReturnReady(ready) {
+    if (hero.classList.contains('return-ready') === ready) return;
+    hero.classList.toggle('return-ready', ready);
+  }
 
   function resetSideLayout() {
     scene.style.removeProperty('--descent-shift');
@@ -55,8 +75,8 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     renderedSideProgress = null;
   }
 
-  function measureSideLayout(bounds, unit, top, heroHeight) {
-    if (window.innerWidth > 809) return null;
+  function measureSideLayout(bounds, unit, top, heroHeight, sideProgress) {
+    if (sideProgress <= 0) return null;
     const edge = parseFloat(getComputedStyle(hero).paddingLeft) || 16;
     const gap = clamp(window.innerWidth * .03, 12, 24);
     const copyLeft = window.innerWidth / 2 + gap / 2;
@@ -76,10 +96,13 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
       row.x = copyLeft - row.left;
       row.y = copyTop - row.top;
       copyTop += row.height * row.scale + 8;
+      row.x *= sideProgress;
+      row.y *= sideProgress;
+      row.scale = 1 + (row.scale - 1) * sideProgress;
     }
     // Clear the copy before it scrolls into the feet; don't change the hero's flow.
     const clearance = (rows[0]?.top ?? heroHeight) - (top + 1249 * unit);
-    return { shift, rows, range: clamp(clearance * 2, 16, 120) };
+    return { shift: shift * sideProgress, rows, range: clamp(clearance * 2, 16, 120) };
   }
 
   function moveSideLayout(scroll) {
@@ -165,9 +188,10 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     settledEndpoint = null;
     travel = 0;
     scene.hidden = true;
-    scene.classList.remove('is-active', 'is-landed');
+    scene.classList.remove('is-active');
+    setLanded(false);
     hero.classList.remove('descent-active');
-    hero.classList.remove('return-ready');
+    setReturnReady(false);
     setPose('front');
     setState('idle');
   }
@@ -198,31 +222,38 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     const top = bounds.top + window.scrollY - jumpOffset;
     const pitch = 224 * unit;
     const arrivalBottom = top + 1249 * unit + 16;
+    const sideProgress = layoutSideProgress ?? (window.innerWidth > 809 ? 0 : 1);
+    const tolerance = typeof subscribeLayout === 'function' ? .01 : .5;
     // A browser-toolbar resize is not a new layout. Keep the current pose,
     // ladder nodes, and arrival animation when the page itself has not moved.
     if (geometry && geometry.width === window.innerWidth
-      && Math.abs(geometry.heroHeight - heroHeight) < 0.5
-      && Math.abs(geometry.unit * 1180 - bounds.height) < 0.5
-      && Math.abs(geometry.center - center) < 0.5
-      && Math.abs(geometry.arrivalBottom - arrivalBottom) < 0.5
-      && Math.abs(geometry.top - top) < 0.5) {
+      && geometry.sideProgress === sideProgress
+      && Math.abs(geometry.heroHeight - heroHeight) < tolerance
+      && Math.abs(geometry.unit * 1180 - bounds.height) < tolerance
+      && Math.abs(geometry.center - center) < tolerance
+      && Math.abs(geometry.arrivalBottom - arrivalBottom) < tolerance
+      && Math.abs(geometry.top - top) < tolerance) {
       return;
     }
-    cancelSpeechReplay();
-    hideScene();
-    snapNext = true;
+    // Read the unshifted copy without restarting the current pose or turn.
+    // These compositor offsets are reapplied by render before the next paint.
+    resetSideLayout();
+    if (!geometry) {
+      hideScene();
+      snapNext = true;
+    }
     // Arrive in the next screen, then let ordinary scrolling leave the avatar behind.
-    const steps = Math.max(1, Math.ceil(heroHeight / pitch));
-    const total = steps * pitch;
+    const total = heroHeight;
+    const steps = Math.max(1, Math.ceil(total / pitch));
     const xUnit = unit * 380 / 299;
     const yUnit = unit * 224 / 217;
     const foot = top + 1242 * unit;
     const ladderTop = foot - (Math.ceil(1242 / 224) + 1) * pitch - 108 * yUnit;
     const ladderEnd = total + arrivalBottom;
     const tileCount = Math.ceil((ladderEnd - ladderTop) / pitch);
-    const sideLayout = measureSideLayout(bounds, unit, top, heroHeight);
+    const sideLayout = measureSideLayout(bounds, unit, top, heroHeight, sideProgress);
     geometry = { unit, pitch, steps, total, top, center, heroHeight, sideLayout,
-      arrivalBottom, width: window.innerWidth };
+      arrivalBottom, sideProgress, width: window.innerWidth };
 
     scene.style.setProperty('--sprite-unit', `${unit}px`);
     scene.style.setProperty('--ladder-x-unit', `${xUnit}px`);
@@ -237,21 +268,27 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     ladder.style.top = `${ladderTop}px`;
     ladder.style.height = `${ladderEnd - ladderTop}px`;
 
-    const fragment = document.createDocumentFragment();
-    for (let index = 0; index < tileCount; index++) {
-      const tile = document.createElement('div');
-      tile.className = 'ladder-tile';
-      const image = document.createElement('img');
-      image.src = probe.currentSrc || probe.src;
-      image.alt = '';
-      image.draggable = false;
-      image.width = 1024;
-      image.height = 1536;
-      tile.append(image);
-      fragment.append(tile);
+    while (strip.childElementCount > tileCount) {
+      strip.removeChild(strip.lastElementChild);
     }
-    strip.replaceChildren(fragment);
+    if (strip.childElementCount < tileCount) {
+      const fragment = document.createDocumentFragment();
+      for (let index = strip.childElementCount; index < tileCount; index++) {
+        const tile = document.createElement('div');
+        tile.className = 'ladder-tile';
+        const image = document.createElement('img');
+        image.src = probe.currentSrc || probe.src;
+        image.alt = '';
+        image.draggable = false;
+        image.width = 1024;
+        image.height = 1536;
+        tile.append(image);
+        fragment.append(tile);
+      }
+      strip.append(fragment);
+    }
     onLayout({ pitch, total });
+    return true;
   }
 
   function turnTo(pose, destination, state, swap, finish) {
@@ -277,8 +314,12 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     turnAnimation = turnElement.animate(frames, { duration, easing: 'ease-out' });
     swapTimer = setTimeout(() => {
       if (!active || turnDestination !== destination) return;
-      swap();
-      setPose(pose);
+      try {
+        swap();
+        setPose(pose);
+      } catch (error) {
+        fail(error);
+      }
     }, alreadyFacing ? 0 : 30);
     turnTimer = setTimeout(() => {
       if (!active || turnDestination !== destination) return;
@@ -295,11 +336,11 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
 
   function startTurn() {
     cancelSpeechReplay();
-    hero.classList.remove('return-ready');
+    setReturnReady(false);
     scene.classList.add('is-active');
     turnTo('a', 'back', 'deploying', () => {
       // Change the crop together with the pose, so the standing sprite stays put.
-      scene.classList.remove('is-landed');
+      setLanded(false);
     }, schedule);
   }
 
@@ -309,7 +350,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     active = true;
     moveActor();
     scene.hidden = false;
-    scene.classList.remove('is-landed');
+    setLanded(false);
     hero.classList.add('descent-active');
     if (!animateTurn) {
       scene.classList.add('is-active');
@@ -332,13 +373,13 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   function arriveAt(endpoint) {
     const atTop = endpoint === 'top';
     turnTo('front', endpoint, atTop ? 'returning' : 'landing', () => {
-      scene.classList.toggle('is-landed', !atTop);
+      setLanded(!atTop);
     }, () => {
       if (atTop) {
         replaySpeech();
         // Show the bubble promptly, but retain the aligned foreground sprite
         // until the last scroll pixels settle. Exchanging it earlier jumps by scrollY.
-        hero.classList.add('return-ready');
+        setReturnReady(true);
         scene.classList.add('is-returning');
         setState('returned');
         if (window.scrollY <= 0.5) hideScene();
@@ -352,16 +393,16 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   }
 
   function placeActor(step) {
-    scene.classList.remove('is-landed');
+    setLanded(false);
     setPose(step % 2 ? 'b' : 'a');
     setState('climbing');
   }
 
-  function render() {
+  function render(resizing = false) {
     frame = 0;
     if (disposed) return;
     try {
-      if (needsMeasure) measure();
+      const remeasured = needsMeasure && measure();
       if (!geometry || reducedMotion.matches || !assetsReady) return;
       // Safari reports scroll positions outside the page during rubber-banding.
       const maximumScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
@@ -374,9 +415,22 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
       const endpointMargin = Math.min(geometry.pitch * 0.2, 12);
       const headingTop = target === null ? !descending : target <= 0.5;
       const headingBottom = target === null ? !reversing : target >= bottom - 0.5;
-      travel = Math.min(scroll, geometry.total);
+      const preserveMode = active && (resizing || resizeAnchorFrame
+        || (preserveResizeMode && !reversing && !descending));
+      travel = preserveMode && (turnDestination === 'bottom' || settledEndpoint === 'bottom')
+        ? geometry.total : Math.min(scroll, geometry.total);
       moveActor();
       moveSideLayout(scroll);
+      if (preserveMode) {
+        preserveResizeMode = true;
+        // A completed deployment still becomes climbing; geometry changes must
+        // not otherwise exchange the pose, reopen the ladder, or replay a turn.
+        if (!turnDestination && !deploymentFrame && renderedState === 'deploying') {
+          setState('climbing');
+        }
+        return;
+      }
+      preserveResizeMode = false;
       // Begin during the visible arrival, not after the exponential tail.
       // Only a target at the endpoint qualifies; ordinary rung stops do not.
       const nearTop = scroll <= endpointMargin && headingTop
@@ -406,10 +460,19 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
         snapNext = false;
         return;
       }
-      if (turnDestination === 'top' || turnDestination === 'bottom' || settledEndpoint) startTurn();
+      if (remeasured && (turnDestination === 'top' || turnDestination === 'bottom' || settledEndpoint)) {
+        // A changed route can place an old endpoint back between its ends.
+        // Adopt that region directly; resizing is not another scroll gesture.
+        cancelTurn();
+        cancelSpeechReplay();
+        setReturnReady(false);
+        scene.classList.add('is-active');
+        placeActor(step);
+      } else if (turnDestination === 'top' || turnDestination === 'bottom' || settledEndpoint) startTurn();
       settledEndpoint = null;
       if (turnDestination || deploymentFrame) return;
       snapNext = false;
+      if (remeasured && !reversing && !descending && renderedState === 'climbing') return;
       placeActor(step);
     } catch (error) {
       fail(error);
@@ -417,12 +480,27 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   }
 
   function schedule() {
-    if (!disposed && !frame) frame = requestAnimationFrame(render);
+    if (!disposed && !frame) frame = requestAnimationFrame(() => render());
   }
 
-  function resized() {
+  function resized(layout) {
+    if (disposed) return;
+    if (Number.isFinite(layout?.sideProgress)) {
+      layoutSideProgress = clamp(layout.sideProgress, 0, 1);
+    }
     needsMeasure = true;
-    schedule();
+    cancelAnimationFrame(frame);
+    frame = 0;
+    // Follow the responsive layout's displayed geometry in the same frame.
+    render(true);
+    cancelAnimationFrame(resizeAnchorFrame);
+    resizeAnchorFrame = active ? requestAnimationFrame(() => {
+      resizeAnchorFrame = 0;
+      // Stage reflow can move the browser's scroll anchor after resize. Adopt
+      // that position without treating it as a new climb or arrival gesture.
+      lastScroll = clamp(window.scrollY, 0,
+        Math.max(0, document.documentElement.scrollHeight - window.innerHeight));
+    }) : 0;
   }
 
   function restored() {
@@ -435,9 +513,11 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     if (disposed) return;
     disposed = true;
     cancelAnimationFrame(frame);
+    cancelAnimationFrame(resizeAnchorFrame);
     clearTimeout(assetTimer);
     window.removeEventListener('scroll', schedule);
-    window.removeEventListener('resize', resized);
+    if (unsubscribeLayout) unsubscribeLayout();
+    else window.removeEventListener('resize', resized);
     window.removeEventListener('pageshow', restored);
     reducedMotion.removeEventListener('change', resized);
     useNativeLayout();
@@ -453,7 +533,8 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   currentCleanup = cleanup;
   setState('idle');
   window.addEventListener('scroll', schedule, { passive: true });
-  window.addEventListener('resize', resized, { passive: true });
+  if (typeof subscribeLayout === 'function') unsubscribeLayout = subscribeLayout(resized);
+  else window.addEventListener('resize', resized, { passive: true });
   window.addEventListener('pageshow', restored);
   reducedMotion.addEventListener('change', resized);
 

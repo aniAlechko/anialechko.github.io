@@ -1,5 +1,6 @@
 import { initDescent } from './avatar-ladder.js';
 import { initSmoothScroll } from './smooth-scroll.js';
+import { initResponsiveLayout } from './responsive-layout.js';
 
 const page = document.documentElement;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -16,6 +17,7 @@ const fontsReady = Promise.allSettled([
   document.fonts.load('700 100px "Neue Montreal Display"'),
   document.fonts.load('700 20px "Neue Montreal"'),
 ]);
+const responsiveLayout = initResponsiveLayout({ layoutReady: fontsReady });
 
 const contactSection = document.querySelector('.landing');
 const contactTitle = document.querySelector('#contact-title');
@@ -113,6 +115,7 @@ try {
 }
 try {
   initDescent({
+    subscribeLayout: responsiveLayout.subscribe,
     onInteraction: skipIntro,
     layoutReady: fontsReady,
     onLayout: route => {
@@ -124,10 +127,11 @@ try {
 } catch (error) {
   console.warn('Character descent unavailable; the page remains scrollable.', error);
 }
-
 let enterBackground = () => {};
 const backgroundReady = import('./background.js').then(async ({ initBackground }) => {
-  enterBackground = await initBackground(waitForAssets(fontsReady, 1800));
+  enterBackground = await initBackground(waitForAssets(fontsReady, 1800), {
+    subscribeLayout: responsiveLayout.subscribe,
+  });
   // A late renderer joins the settled page without replaying the entrance.
   if (page.classList.contains('is-ready')) enterBackground();
 }).catch(error => {

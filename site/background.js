@@ -1,4 +1,4 @@
-export async function initBackground(fontsReady) {
+export async function initBackground(fontsReady, { subscribeLayout } = {}) {
   const originalCanvas = document.querySelector('#hero-field');
   if (!originalCanvas) return () => {};
   const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -33,6 +33,10 @@ export async function initBackground(fontsReady) {
   sourceCanvas.width = 2048;
   sourceCanvas.height = 256;
   const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
+  const cellSize = () => {
+    const progress = clamp((width - 450) / 300);
+    return 5 + 1.8 * progress * progress * (3 - 2 * progress);
+  };
   const easeQuart = (value) => value < 0.5 ? 8 * value ** 4 : 1 - (-2 * value + 2) ** 4 / 2;
 
   const vertexSource = `
@@ -246,7 +250,7 @@ export async function initBackground(fontsReady) {
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
     context.fillStyle = '#000';
     context.fillRect(0, 0, width, height);
-    const cell = width < 600 ? 5 : 6.8;
+    const cell = cellSize();
     const aspect = width / height;
     for (let py = cell * 0.5; py < height; py += cell) {
       for (let px = cell * 0.5; px < width; px += cell) {
@@ -303,7 +307,7 @@ export async function initBackground(fontsReady) {
     }
     gl.uniform2f(uniforms.uSize, width, height);
     gl.uniform1f(uniforms.uDpr, dpr);
-    gl.uniform1f(uniforms.uCell, width < 600 ? 5 : 6.8);
+    gl.uniform1f(uniforms.uCell, cellSize());
     gl.uniform1f(uniforms.uTime, 1.1 + elapsed * PHASE_SPEED);
     gl.uniform1f(uniforms.uAmplitude, amplitude);
     gl.uniform1f(uniforms.uMix, mix);
@@ -413,10 +417,14 @@ export async function initBackground(fontsReady) {
     pointer.targetX = clamp((event.clientX - bounds.left) / width);
     pointer.targetY = 1 - clamp((event.clientY - bounds.top) / height);
   }, { passive: true });
-  window.addEventListener('resize', () => {
-    cancelAnimationFrame(resizeFrame);
-    resizeFrame = requestAnimationFrame(resize);
-  }, { passive: true });
+  if (subscribeLayout) {
+    subscribeLayout(resize);
+  } else {
+    window.addEventListener('resize', () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(resize);
+    }, { passive: true });
+  }
   motionPreference.addEventListener('change', updatePlayback);
   document.addEventListener('visibilitychange', updatePlayback);
 

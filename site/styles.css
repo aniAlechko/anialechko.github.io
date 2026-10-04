@@ -186,7 +186,7 @@ a:hover { color: #efee74; }
 }
 .hero-details p { margin: 0; }
 .hero-intro { width: max-content; }
-.intro-row { display: block; white-space: nowrap; }
+.intro-row, .status-row { display: block; white-space: nowrap; }
 .status { text-align: left; }
 .scroll-indicator {
   position: absolute;
@@ -309,6 +309,42 @@ a:hover { color: #efee74; }
   .js .speech-word { animation: none !important; transform: none; }
   .js .character-pose--idle { opacity: 1 !important; }
   .js .character-pose--jump { opacity: 0 !important; }
+}
+
+/* The controller commits real sizes and positions together in one coordinate space. */
+.contact-header.layout-managed a { transform: none; height: 24px; }
+.contact-header.layout-managed .desktop-label,
+.contact-header.layout-managed .mobile-label { position: absolute; left: 0; display: block; pointer-events: none; }
+.contact-header.layout-managed .desktop-label { opacity: var(--desktop-label-opacity, 1); }
+.contact-header.layout-managed .mobile-label { opacity: var(--mobile-label-opacity, 0); }
+.hero.layout-managed { display: block; padding: 0; }
+.hero.layout-managed .hero-composition {
+  position: absolute; inset: 0; width: auto; min-height: 0; display: block;
+}
+.hero.layout-managed .hero-name {
+  display: block; min-height: 0; font-size: var(--layout-name-size);
+}
+.hero.layout-managed .name-position { position: absolute; }
+.hero.layout-managed .character-position {
+  position: absolute; display: block; transform: none; gap: 0;
+}
+.hero.layout-managed .speech { position: absolute; bottom: auto; transform: none; }
+.hero.layout-managed .hero-details {
+  position: absolute; inset: 0; display: block; width: auto; max-width: none; margin: 0;
+  font-size: var(--layout-details-size); line-height: var(--layout-details-line-height);
+}
+.hero.layout-managed .hero-details p { position: absolute; text-align: left; }
+.hero.layout-managed .intro-row, .hero.layout-managed .status-row { width: max-content; }
+.hero.layout-managed .scroll-indicator { bottom: auto; transform: none; }
+.is-entering .hero.layout-managed .given-name .name-word {
+  animation: responsive-name-enter .4s var(--given-entry-easing) var(--given-entry-delay) both;
+}
+.is-entering .hero.layout-managed .family-name .name-word {
+  animation: responsive-name-enter .4s var(--family-entry-easing) var(--family-entry-delay) both;
+}
+@keyframes responsive-name-enter {
+  from { opacity: 0; transform: translateY(var(--name-entry-distance)); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Keep the entire character journey outside the contact section. */

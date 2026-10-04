@@ -17,6 +17,8 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   let strength = 0;
   let responseTime = 90;
   let route;
+  let resizeFrame = 0;
+  let resizePending = false;
 
   function restingTarget(value, sign = 0) {
     const bounded = clamp(value, maxScroll());
@@ -34,7 +36,10 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
 
   function stop() {
     cancelAnimationFrame(frame);
+    cancelAnimationFrame(resizeFrame);
     frame = 0;
+    resizeFrame = 0;
+    resizePending = false;
     direction = 0;
     strength = 0;
     lastWheelTime = 0;
@@ -46,6 +51,9 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
     // the last few pixels of the ease-out.
     const elapsed = Math.min(50, Math.max(0, time - previousTime));
     previousTime = time;
+    if (resizePending && Math.abs(window.scrollY - ownScroll) > 1.5) {
+      position = ownScroll = window.scrollY;
+    }
     target = clamp(target, maxScroll());
     position += (target - position) * (1 - Math.exp(-elapsed / responseTime));
     const finished = Math.abs(target - position) < 0.4;
@@ -116,7 +124,27 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   }
 
   function scrolled() {
-    if (frame && Math.abs(window.scrollY - ownScroll) > 1.5) stop();
+    if (!frame || Math.abs(window.scrollY - ownScroll) <= 1.5) return;
+    if (resizePending) position = ownScroll = window.scrollY;
+    else stop();
+  }
+
+  function resized() {
+    position = ownScroll = window.scrollY;
+    if (!frame) {
+      target = position;
+      return;
+    }
+    // Keep wheel momentum while the ladder lays out its new rung positions.
+    // Browser anchoring can follow reflow after the resize event has returned.
+    resizePending = true;
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = 0;
+        resizePending = false;
+      });
+    });
   }
 
   function keyed(event) {
@@ -130,7 +158,7 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
     window.removeEventListener('touchstart', stop);
     window.removeEventListener('pointerdown', stop);
     window.removeEventListener('keydown', keyed);
-    window.removeEventListener('resize', stop);
+    window.removeEventListener('resize', resized);
     window.removeEventListener('pageshow', stop);
     reducedMotion.removeEventListener('change', stop);
     currentController = undefined;
@@ -141,7 +169,7 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   window.addEventListener('touchstart', stop, { passive: true });
   window.addEventListener('pointerdown', stop, { passive: true });
   window.addEventListener('keydown', keyed);
-  window.addEventListener('resize', stop, { passive: true });
+  window.addEventListener('resize', resized, { passive: true });
   window.addEventListener('pageshow', stop);
   reducedMotion.addEventListener('change', stop);
   currentController = {

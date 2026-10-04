@@ -70,7 +70,10 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
   };
   const style = () => ({
     setProperty(name, value) { this[name] = value; },
-    removeProperty(name) { delete this[name]; },
+    removeProperty(name) {
+      delete this[name];
+      delete this[name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())];
+    },
   });
   function element(name) {
     return {
@@ -90,6 +93,21 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
   const hero = element('hero');
   const original = element('original');
   const speech = element('speech');
+  const intro = element('intro');
+  const status = element('status');
+  // Include compositor offsets in measured copy bounds, as a browser does.
+  // This catches remeasurement that accidentally uses the shifted layout.
+  for (const [index, detail] of [intro, status].entries()) {
+    detail.getBoundingClientRect = () => {
+      const [x = 0, y = 0] = (detail.style.translate || '')
+        .split(/\s+/).map(value => Number.parseFloat(value) || 0);
+      const scale = Number(detail.style.scale ?? 1);
+      const left = viewport.width / 2 - 100 + x;
+      const top = 600 + index * 46 - window.scrollY + y;
+      return { left, top, width: 200 * scale, height: 38 * scale,
+        right: left + 200 * scale, bottom: top + 38 * scale };
+    };
+  }
   const scene = element('scene');
   const actor = element('actor');
   const actorDocumentTop = () => {
@@ -132,7 +150,8 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     '#landing': site, '#descent-scene': scene };
   const sceneNodes = { '.descent-ladder': ladder, '.descent-ladder-strip': strip,
     '.descent-actor': actor, '.descent-turn': turn, '.descent-ladder-probe': probe };
-  hero.querySelector = selector => selector === '.speech' ? speech : null;
+  hero.querySelector = selector => ({ '.speech': speech, '.hero-intro': intro,
+    '.status': status })[selector] || null;
   hero.querySelectorAll = () => [];
   scene.querySelector = selector => sceneNodes[selector] || null;
   scene.querySelectorAll = selector => selector === '.descent-image' ? Object.values(poses) : [];
@@ -163,7 +182,8 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     document: { documentElement, querySelector: selector => nodes[selector] || null,
       createDocumentFragment: () => element('fragment'), createElement: element },
     matchMedia,
-    getComputedStyle: item => ({ transform: item.style.transform || 'none' }),
+    getComputedStyle: item => ({ transform: item.style.transform || 'none',
+      paddingLeft: item === hero ? '16px' : '0px' }),
     DOMMatrixReadOnly: class { constructor() { this.m42 = 0; } },
     requestAnimationFrame(fn) { const id = nextId++; frames.set(id, fn); return id; },
     cancelAnimationFrame: id => frames.delete(id),
@@ -225,7 +245,8 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     emit('resize');
     await tick();
   }
-  return { ready, tick, scrollTo, resize, scene, actor, hero, ladder, strip, stage, site, poses, layouts,
+  return { ready, tick, scrollTo, resize, scene, actor, hero, intro, status,
+    ladder, strip, stage, site, poses, layouts,
     animationCalls, actorDocumentTop, window, smoothScroll,
     cleanup() { cleanup(); smoothScroll?.destroy(); },
     maxScroll: () => documentElement.scrollHeight - window.innerHeight,
@@ -251,6 +272,95 @@ async function landed(harness) {
 }
 
 const tests = [
+  ['mobile columns develop only through scroll and return to the original hero', async () => {
+    const h = makeHarness();
+    await h.ready();
+    const route = h.route();
+    const unit = Number.parseFloat(h.scene.style['--sprite-unit']);
+    const actorWidth = 524 * unit;
+    const baseLeft = Number.parseFloat(h.actor.style.left);
+    const baseTop = h.actor.style.top;
+    const ladderLeft = h.ladder.style.left;
+    const ladderTop = h.ladder.style.top;
+    const routeHeight = h.stage.style.height;
+    const builds = h.strip.replacements;
+    const copy = [h.intro, h.status];
+    const baselineCopy = copy.map(element => element.getBoundingClientRect());
+    const shiftedLeft = () => baseLeft
+      + Number.parseFloat(h.scene.style['--descent-shift'] || '0');
+    assert.ok(Math.abs(baseLeft + actorWidth / 2 - h.window.innerWidth / 2) < 0.01,
+      'The foreground did not start at the centered hero avatar');
+    assert.equal(shiftedLeft(), baseLeft, 'Mobile columns appeared before scrolling');
+
+    await h.scrollTo(1);
+    assert.ok(shiftedLeft() < baseLeft && shiftedLeft() > 16,
+      'A small scroll jumped immediately to the left column');
+    const firstShift = shiftedLeft();
+    await h.scrollTo(route.pitch * 3);
+    await h.tick(200);
+    assert.ok(shiftedLeft() < firstShift, 'Further scroll did not complete the side layout');
+    assert.ok(Math.abs(shiftedLeft() - 16) < 0.01,
+      'The climbing avatar did not respect the left page edge');
+    for (const element of copy) {
+      const bounds = element.getBoundingClientRect();
+      assert.ok(bounds.left > h.window.innerWidth / 2,
+        'Copy did not move into the right half');
+      assert.ok(bounds.right <= h.window.innerWidth - 16 + 0.01,
+        'Copy exceeds the right page edge');
+      assert.ok(shiftedLeft() + actorWidth < bounds.left,
+        'The climbing avatar overlaps the text column');
+    }
+    assert.equal(h.actor.style.left, `${baseLeft}px`, 'Scrolling rewrote the base actor position');
+    assert.equal(h.actor.style.top, baseTop, 'Scrolling rewrote the base actor top');
+    assert.equal(h.ladder.style.left, ladderLeft, 'Scrolling rewrote the base ladder position');
+    assert.equal(h.ladder.style.top, ladderTop, 'Scrolling rewrote the base ladder top');
+    assert.equal(h.route(), route, 'Side layout changed the rung route');
+    assert.equal(h.stage.style.height, routeHeight, 'Side layout changed the document height');
+    assert.equal(h.strip.replacements, builds, 'Side layout rebuilt the ladder');
+
+    await h.scrollTo(0);
+    await h.tick(200);
+    assert.equal(h.scene.hidden, true, 'Return did not restore the original hero');
+    assert.equal(h.scene.style['--descent-shift'], undefined,
+      'Return retained a ladder offset');
+    for (const [index, element] of copy.entries()) {
+      assert.deepEqual(element.getBoundingClientRect(), baselineCopy[index],
+        'Return did not restore the original text layout');
+      assert.equal(element.style.translate, undefined, 'Return retained a text offset');
+      assert.equal(element.style.scale, undefined, 'Return retained a text scale');
+      assert.equal(element.style.transformOrigin, undefined, 'Return retained a text origin');
+    }
+    assert.equal(h.route(), route);
+    assert.equal(h.strip.replacements, builds);
+    h.cleanup();
+  }],
+  ['orientation clears mobile offsets on desktop and measures the restored copy on return', async () => {
+    const h = makeHarness();
+    await h.ready();
+    await h.scrollTo(h.route().pitch * 3);
+    await h.tick(200);
+    assert.ok(Number.parseFloat(h.scene.style['--descent-shift']) < 0,
+      'Fixture did not enter the mobile side layout');
+    await h.resize(810, 390, 390);
+    assert.equal(h.scene.style['--descent-shift'], undefined,
+      'Desktop retained the mobile ladder offset');
+    for (const element of [h.intro, h.status]) {
+      assert.equal(element.style.translate, undefined, 'Desktop retained a text offset');
+      assert.equal(element.style.scale, undefined, 'Desktop retained a text scale');
+    }
+    await h.resize(809, 780, 780);
+    for (const element of [h.intro, h.status]) {
+      const bounds = element.getBoundingClientRect();
+      assert.ok(bounds.left > 809 / 2 && bounds.right <= 809 - 16 + 0.01,
+        'Returning to mobile used already shifted copy bounds');
+    }
+    await h.scrollTo(0);
+    await h.tick(200);
+    assert.equal(h.scene.hidden, true);
+    assert.equal(h.intro.getBoundingClientRect().left, 809 / 2 - 100,
+      'Resizing changed the original centered text position');
+    h.cleanup();
+  }],
   ['the descent belongs to a clipped journey before the contact section', async () => {
     const ancestors = documentAncestors();
     for (const id of ['hero', 'descent-stage', 'descent-scene']) {

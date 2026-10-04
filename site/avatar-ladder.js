@@ -7,8 +7,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   const original = document.querySelector('.character');
   const speech = hero?.querySelector('.speech');
   const speechWords = [...hero?.querySelectorAll('.speech-word') || []];
-  const spacer = document.querySelector('#descent-space');
-  const site = document.querySelector('#landing');
+  const stage = document.querySelector('#descent-stage');
   const scene = document.querySelector('#descent-scene');
   const ladder = scene?.querySelector('.descent-ladder');
   const strip = scene?.querySelector('.descent-ladder-strip');
@@ -17,7 +16,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   const probe = scene?.querySelector('.descent-ladder-probe');
   const poses = Object.fromEntries([...scene?.querySelectorAll('.descent-image') || []]
     .map(image => [image.dataset.pose, image]));
-  if (![hero, original, spacer, site, scene, ladder, strip, actor, turnElement, probe,
+  if (![hero, original, stage, scene, ladder, strip, actor, turnElement, probe,
     poses.front, poses.a, poses.b].every(Boolean)) return () => {};
 
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -121,26 +120,9 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   function useNativeLayout() {
     cancelSpeechReplay();
     hideScene();
-    spacer.style.height = '0px';
-    scene.style.removeProperty('height');
-    site.style.removeProperty('--landing-height');
-    site.style.removeProperty('--landing-offset');
+    stage.style.height = '0px';
     geometry = undefined;
     onLayout(null);
-  }
-
-  function sizeLanding() {
-    // Reserve only enough page below the avatar to reach its final rung.
-    // Keep that reserve stable when Safari's toolbar changes the viewport.
-    const minimum = Math.max(0, geometry.landingMinimum || 0,
-      window.innerHeight - geometry.landingOffset + 24);
-    geometry.landingMinimum = minimum;
-    site.style.setProperty('--landing-offset', `${geometry.landingOffset}px`);
-    site.style.setProperty('--landing-height', `${minimum}px`);
-    // CSS applies the same reserve against 100lvh before Safari can clamp the
-    // scroll position. The footer's own content can exceed this minimum.
-    const landingHeight = Math.max(minimum, site.getBoundingClientRect().height);
-    scene.style.height = `${geometry.total + geometry.landingOffset + landingHeight}px`;
   }
 
   function measure() {
@@ -160,44 +142,44 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
     const jumpOffset = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
     const top = bounds.top + window.scrollY - jumpOffset;
     const pitch = 224 * unit;
-    const landingOffset = top + 1249 * unit + 16;
+    const arrivalBottom = top + 1249 * unit + 16;
     // A browser-toolbar resize is not a new layout. Keep the current pose,
     // ladder nodes, and arrival animation when the page itself has not moved.
     if (geometry && geometry.width === window.innerWidth
       && Math.abs(geometry.heroHeight - heroHeight) < 0.5
       && Math.abs(geometry.unit * 1180 - bounds.height) < 0.5
       && Math.abs(geometry.center - center) < 0.5
-      && Math.abs(geometry.landingOffset - landingOffset) < 0.5
+      && Math.abs(geometry.arrivalBottom - arrivalBottom) < 0.5
       && Math.abs(geometry.top - top) < 0.5) {
-      sizeLanding();
       return;
     }
     cancelSpeechReplay();
     hideScene();
     snapNext = true;
-    // A short transition lets the hero copy leave before the contact arrival.
-    const steps = Math.max(1, Math.ceil((heroHeight * 1.3 - landingOffset) / pitch));
+    // Arrive in the next screen, then let ordinary scrolling leave the avatar behind.
+    const steps = Math.max(1, Math.ceil(heroHeight / pitch));
     const total = steps * pitch;
     const xUnit = unit * 380 / 299;
     const yUnit = unit * 224 / 217;
     const foot = top + 1242 * unit;
     const ladderTop = foot - (Math.ceil(1242 / 224) + 1) * pitch - 108 * yUnit;
-    const contactStart = total + landingOffset;
-    const tileCount = Math.ceil((contactStart - ladderTop) / pitch);
+    const ladderEnd = total + arrivalBottom;
+    const tileCount = Math.ceil((ladderEnd - ladderTop) / pitch);
     geometry = { unit, pitch, steps, total, top, center, heroHeight,
-      landingOffset, width: window.innerWidth };
+      arrivalBottom, width: window.innerWidth };
 
     scene.style.setProperty('--sprite-unit', `${unit}px`);
     scene.style.setProperty('--ladder-x-unit', `${xUnit}px`);
     scene.style.setProperty('--ladder-y-unit', `${yUnit}px`);
-    spacer.style.height = `${Math.max(0, contactStart - heroHeight)}px`;
-    sizeLanding();
+    // Keep a complete arrival screen before contact, including Safari's largest
+    // viewport. Its toolbar can then resize without moving either section.
+    stage.style.height = `calc(${total - heroHeight}px + max(100lvh, ${arrivalBottom}px))`;
     actor.style.left = `${center - 524 * unit / 2}px`;
     actor.style.top = `${top}px`;
     moveActor();
     ladder.style.left = `${center - 374 * xUnit / 2}px`;
     ladder.style.top = `${ladderTop}px`;
-    ladder.style.height = `${contactStart - ladderTop}px`;
+    ladder.style.height = `${ladderEnd - ladderTop}px`;
 
     const fragment = document.createDocumentFragment();
     for (let index = 0; index < tileCount; index++) {
@@ -419,7 +401,7 @@ export function initDescent({ onInteraction = () => {}, layoutReady = Promise.re
   reducedMotion.addEventListener('change', resized);
 
   // Reserve the route before the entrance ends, so early scrolling cannot
-  // encounter a late spacer insertion when the sprites finish decoding.
+  // encounter a late section resize when the sprites finish decoding.
   if (window.scrollY > 0.5) onInteraction();
   schedule();
   Promise.resolve(layoutReady).then(() => {

@@ -32,6 +32,7 @@
     <a class="linkedin" href="https://www.linkedin.com/in/anialechko/" target="_blank" rel="noopener noreferrer" aria-label="Alex Rivkin on LinkedIn (opens in a new tab)"><span class="desktop-label">linkedin.com/in/anialechko</span><span class="mobile-label" aria-hidden="true">LinkedIn</span></a>
   </header>
   <main aria-labelledby="page-title">
+  <div class="journey">
   <section class="hero" aria-describedby="portfolio-note">
     <canvas id="hero-field" aria-hidden="true"></canvas>
     <div class="hero-composition">
@@ -72,7 +73,19 @@
       </svg>
     </div>
   </section>
-  <div id="descent-space" aria-hidden="true"></div>
+  <section id="descent-stage" aria-hidden="true"></section>
+  <div id="descent-scene" class="descent-scene" aria-hidden="true" hidden>
+    <div class="descent-ladder"><div class="descent-ladder-strip"></div></div>
+    <div class="descent-actor">
+      <div class="descent-turn">
+        <img class="descent-image" data-pose="front" src="/images/alex-rivkin-idle.png" width="1024" height="1536" alt="" draggable="false" />
+        <img class="descent-image" data-pose="a" src="/images/alex-rivkin-climb-back-a.png" width="1024" height="1536" alt="" fetchpriority="low" draggable="false" hidden />
+        <img class="descent-image" data-pose="b" src="/images/alex-rivkin-climb-back-b.png" width="1024" height="1536" alt="" fetchpriority="low" draggable="false" hidden />
+      </div>
+    </div>
+    <img class="descent-ladder-probe" src="/images/pixel-construction-ladder.png" width="1024" height="1536" alt="" fetchpriority="low" hidden />
+  </div>
+  </div>
   <section id="landing" class="landing" aria-labelledby="contact-title">
     <div class="contact-copy">
       <h2 id="contact-title"><span>LET'S BUILD</span><span>TOGETHER</span></h2>
@@ -85,17 +98,6 @@
     </div>
   </section>
   </main>
-  <div id="descent-scene" class="descent-scene" aria-hidden="true" hidden>
-    <div class="descent-ladder"><div class="descent-ladder-strip"></div></div>
-    <div class="descent-actor">
-      <div class="descent-turn">
-        <img class="descent-image" data-pose="front" src="/images/alex-rivkin-idle.png" width="1024" height="1536" alt="" draggable="false" />
-        <img class="descent-image" data-pose="a" src="/images/alex-rivkin-climb-back-a.png" width="1024" height="1536" alt="" fetchpriority="low" draggable="false" hidden />
-        <img class="descent-image" data-pose="b" src="/images/alex-rivkin-climb-back-b.png" width="1024" height="1536" alt="" fetchpriority="low" draggable="false" hidden />
-      </div>
-    </div>
-    <img class="descent-ladder-probe" src="/images/pixel-construction-ladder.png" width="1024" height="1536" alt="" fetchpriority="low" hidden />
-  </div>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

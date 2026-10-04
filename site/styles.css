@@ -311,15 +311,17 @@ a:hover { color: #efee74; }
   .js .character-pose--jump { opacity: 0 !important; }
 }
 
-/* The ladder shares the page's coordinates, so ordinary scrolling drives the descent. */
-#descent-space { position: relative; height: 0; pointer-events: none; }
+/* Keep the entire character journey outside the contact section. */
+.journey { position: relative; isolation: isolate; overflow: clip; }
+#descent-stage { position: relative; height: 0; pointer-events: none; }
 .landing {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  min-height: max(0px, calc(100lvh - var(--landing-offset, 100lvh) + 24px), var(--landing-height, 0px));
+  justify-content: flex-end;
+  min-height: 100vh;
+  min-height: 100lvh;
   padding: clamp(32px, 4svh, 56px) var(--page-edge);
   overflow: hidden;
   background: #000;

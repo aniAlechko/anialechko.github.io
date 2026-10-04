@@ -49,6 +49,10 @@ function makeHarness({ fonts = 'ready', images = 'ready', background = 'ready', 
   const window = { ...eventTarget(), scrollY: 0 };
   const warnings = [];
   const backgroundEntries = [];
+  const responsiveCalls = [];
+  let responsiveAPI;
+  let descentOptions;
+  let backgroundOptions;
   const asset = (state, gate) => state === 'pending' ? gate.promise
     : state === 'failed' ? Promise.reject(new Error('Asset unavailable')) : Promise.resolve();
   const image = { decode: () => asset(images, imageGate) };
@@ -78,12 +82,37 @@ function makeHarness({ fonts = 'ready', images = 'ready', background = 'ready', 
       onInteraction = options.onInteraction;
       return { setRoute() {}, getTarget: () => null };
     },
-    initDescent() {},
+    initResponsiveLayout({ layoutReady }) {
+      const listeners = new Set();
+      let layout;
+      const commit = () => {
+        responsiveCalls.push('hero');
+        layout = { width: 1200, height: 900 };
+        for (const listener of listeners) listener(layout);
+      };
+      window.addEventListener('resize', commit);
+      Promise.resolve(layoutReady).then(commit);
+      responsiveAPI = {
+        subscribe(listener) {
+          listeners.add(listener);
+          if (layout) listener(layout);
+          return () => listeners.delete(listener);
+        },
+        cleanup() { listeners.clear(); window.removeEventListener('resize', commit); },
+      };
+      return responsiveAPI;
+    },
+    initDescent(options) {
+      descentOptions = options;
+      options.subscribeLayout(() => responsiveCalls.push('ladder'));
+    },
     async loadBackground() {
       if (background === 'missing') throw new Error('Background module unavailable');
       if (background === 'pending') await backgroundGate.promise;
-      return { async initBackground(fontsReady) {
+      return { async initBackground(fontsReady, options) {
         await fontsReady;
+        backgroundOptions = options;
+        options.subscribeLayout(() => responsiveCalls.push('background'));
         // The renderer needs to know whether to animate or join an already visible page.
         return () => backgroundEntries.push({
           ready: classes.has('is-ready'), entering: classes.has('is-entering'),
@@ -113,6 +142,10 @@ function makeHarness({ fonts = 'ready', images = 'ready', background = 'ready', 
   }
   return {
     classes, character, lastWord, window, warnings, backgroundEntries, advance,
+    responsiveCalls,
+    get responsiveAPI() { return responsiveAPI; },
+    get descentOptions() { return descentOptions; },
+    get backgroundOptions() { return backgroundOptions; },
     interact: () => onInteraction(),
     resolveBackground: backgroundGate.resolve,
     resolveAssets() { fontGate.resolve(); imageGate.resolve(); },
@@ -125,6 +158,15 @@ function makeHarness({ fonts = 'ready', images = 'ready', background = 'ready', 
 }
 
 const tests = [
+  ['ladder and background share the complete displayed hero layout on each resize', async () => {
+    const h = makeHarness(); await h.advance(0); h.assertComplete();
+    assert.equal(h.descentOptions.subscribeLayout, h.responsiveAPI.subscribe);
+    assert.equal(h.backgroundOptions.subscribeLayout, h.responsiveAPI.subscribe);
+    h.responsiveCalls.length = 0;
+    h.window.emit('resize');
+    assert.deepEqual(h.responsiveCalls, ['hero', 'ladder', 'background'],
+      'A consumer resized before the hero had committed its real geometry');
+  }],
   ['normal startup reveals the page and finishes the entrance', async () => {
     const h = makeHarness();
     await h.advance(0);

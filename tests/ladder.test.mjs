@@ -38,7 +38,8 @@ function deferred() {
 }
 
 function makeHarness({ pendingImages = false, pendingLayout = false, largeViewportHeight = 840,
-  initialScroll = 0, runPageStart = false, landingContentHeight = 280, withSmoothScroll = false } = {}) {
+  initialScroll = 0, runPageStart = false, landingContentHeight = 280, withSmoothScroll = false,
+  withSubscribedLayout = false } = {}) {
   let now = 0;
   let nextId = 1;
   const timers = new Map();
@@ -47,6 +48,8 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
   const decoded = deferred();
   const layoutReady = deferred();
   const animationCalls = [];
+  const layoutListeners = new Set();
+  let originalReads = 0;
   const layouts = [];
   const warnings = [];
   const viewport = { width: 390, height: 780, stableHeight: 780, largeViewportHeight };
@@ -79,8 +82,18 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     return {
       name, style: style(), classList: classes(), dataset: {}, hidden: false,
       naturalWidth: 1024, src: '/images/test.png', children: [], replacements: 0,
-      append(child) { this.children.push(child); },
-      replaceChildren(...children) { this.children = children; this.replacements++; },
+      append(child) { this.children.push(...(child.name === 'fragment' ? child.children : [child])); },
+      removeChild(child) {
+        const index = this.children.indexOf(child);
+        assert.ok(index >= 0, 'Removed a tile outside the ladder strip');
+        this.children.splice(index, 1);
+      },
+      replaceChildren(...children) {
+        this.children = children.flatMap(child => child.name === 'fragment' ? child.children : [child]);
+        this.replacements++;
+      },
+      get childElementCount() { return this.children.length; },
+      get lastElementChild() { return this.children.at(-1) || null; },
       decode: () => pendingImages ? decoded.promise : Promise.resolve(),
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 200 }),
       animate(keyframes, options) {
@@ -109,6 +122,12 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     };
   }
   const scene = element('scene');
+  const visibilityChanges = [];
+  let sceneHidden = scene.hidden;
+  Object.defineProperty(scene, 'hidden', {
+    get: () => sceneHidden,
+    set: value => { sceneHidden = value; visibilityChanges.push(value); },
+  });
   const actor = element('actor');
   const actorDocumentTop = () => {
     const translate = actor.style.transform?.match(/translate3d\(0, ([^p]+)px, 0\)/);
@@ -169,9 +188,12 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
   documentElement.classList = classes();
   hero.getBoundingClientRect = () => ({ left: 0, top: -window.scrollY,
     width: viewport.width, height: viewport.stableHeight });
-  original.getBoundingClientRect = () => ({ left: viewport.width / 2 - 55,
-    top: (viewport.width > 600 ? 140 : 330) - window.scrollY,
-    width: 110, height: viewport.width > 600 ? 180 : 220 });
+  original.getBoundingClientRect = () => {
+    originalReads++;
+    return { left: (viewport.characterCenter ?? viewport.width / 2) - 55,
+      top: (viewport.characterTop ?? (viewport.width > 600 ? 140 : 330)) - window.scrollY,
+      width: 110, height: viewport.characterHeight ?? (viewport.width > 600 ? 180 : 220) };
+  };
   const matchMedia = query => ({
     media: query,
     matches: false,
@@ -201,6 +223,10 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     layoutReady: pendingLayout ? layoutReady.promise : Promise.resolve(),
     onLayout: layout => { layouts.push(layout); smoothScroll?.setRoute(layout); },
     getScrollTarget: () => smoothScroll?.getTarget() ?? null,
+    subscribeLayout: withSubscribedLayout ? listener => {
+      layoutListeners.add(listener);
+      return () => layoutListeners.delete(listener);
+    } : undefined,
   });
   function emit(type, event = { type }) {
     for (const listener of [...(events.get(type) || [])]) listener(event);
@@ -230,7 +256,7 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
     emit('scroll');
     await tick();
   }
-  async function resize(width, height, stableHeight = viewport.stableHeight) {
+  function resizeNow(width, height, stableHeight = viewport.stableHeight) {
     if (width !== viewport.width) viewport.largeViewportHeight = height;
     Object.assign(viewport, { width, height, stableHeight });
     Object.assign(window, { innerWidth: width, innerHeight: height });
@@ -243,11 +269,26 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
       emit('scroll');
     }
     emit('resize');
+  }
+  async function resize(width, height, stableHeight = viewport.stableHeight) {
+    resizeNow(width, height, stableHeight);
     await tick();
   }
-  return { ready, tick, scrollTo, resize, scene, actor, hero, intro, status,
+  return { ready, tick, scrollTo, resize, resizeNow, scene, actor, hero, intro, status,
     ladder, strip, stage, site, poses, layouts,
-    animationCalls, actorDocumentTop, window, smoothScroll,
+    animationCalls, actorDocumentTop, window, smoothScroll, visibilityChanges,
+    get originalReads() { return originalReads; },
+    get pendingFrames() { return frames.size; },
+    get layoutSubscriptions() { return layoutListeners.size; },
+    resizeListeners: () => events.get('resize')?.size || 0,
+    commitLayout({ characterHeight, characterTop, characterCenter, heroHeight, sideProgress } = {}) {
+      if (characterHeight !== undefined) viewport.characterHeight = characterHeight;
+      if (characterTop !== undefined) viewport.characterTop = characterTop;
+      if (characterCenter !== undefined) viewport.characterCenter = characterCenter;
+      if (heroHeight !== undefined) viewport.stableHeight = heroHeight;
+      for (const listener of [...layoutListeners]) listener({ sideProgress });
+    },
+    queueScroll(position) { window.scrollY = position; emit('scroll'); },
     cleanup() { cleanup(); smoothScroll?.destroy(); },
     maxScroll: () => documentElement.scrollHeight - window.innerHeight,
     contactStart: () => viewport.stableHeight + stageHeight(),
@@ -359,6 +400,310 @@ const tests = [
     assert.equal(h.scene.hidden, true);
     assert.equal(h.intro.getBoundingClientRect().left, 809 / 2 - 100,
       'Resizing changed the original centered text position');
+    h.cleanup();
+  }],
+  ['layout subscriptions measure displayed geometry synchronously and detach cleanly', async () => {
+    const h = makeHarness({ withSubscribedLayout: true });
+    await h.ready();
+    assert.equal(h.layoutSubscriptions, 1);
+    assert.equal(h.resizeListeners(), 0, 'Subscribed descent retained a competing resize listener');
+    await h.scrollTo(h.route().pitch * 3);
+    await h.tick();
+    await h.tick(200);
+    const pose = h.actor.dataset.pose;
+    const animations = h.animationCalls.length;
+    h.resizeNow(810, 780);
+    const oldUnit = Number.parseFloat(h.scene.style['--sprite-unit']);
+    assert.ok(Math.abs(oldUnit - 220 / 1180) < .00001,
+      'A raw resize bypassed the authoritative displayed layout');
+    h.commitLayout({ characterHeight: 205, characterCenter: 330, characterTop: 290, sideProgress: .5 });
+    const unit = Number.parseFloat(h.scene.style['--sprite-unit']);
+    assert.ok(Math.abs(unit - 205 / 1180) < .00001, 'Descent measured a CSS endpoint instead of displayed height');
+    assert.ok(Math.abs(Number.parseFloat(h.actor.style.left) + 524 * unit / 2 - 330) < .01);
+    assert.equal(h.actor.style.top, '290px');
+    assert.equal(h.actor.dataset.pose, pose);
+    assert.equal(h.scene.dataset.state, 'climbing');
+    assert.equal(h.animationCalls.length, animations, 'Displayed layout tick restarted a turn');
+    h.cleanup();
+    assert.equal(h.layoutSubscriptions, 0, 'Cleanup left a displayed layout subscription behind');
+    const afterCleanup = h.originalReads;
+    h.commitLayout({ characterHeight: 190, sideProgress: 1 });
+    assert.equal(h.originalReads, afterCleanup, 'A removed subscription still measured the character');
+  }],
+  ['continuous displayed layout blends side columns without a width breakpoint jump', async () => {
+    const h = makeHarness({ withSubscribedLayout: true });
+    await h.ready();
+    await h.scrollTo(h.route().pitch * 3);
+    await h.tick();
+    await h.tick(200);
+    h.resizeNow(810, 780);
+    const pose = h.actor.dataset.pose;
+    const unit = 180 / 1180;
+    const fullShift = 16 + 524 * unit / 2 - 810 / 2;
+    for (const factor of [0, .25, .5, .75, 1, .5, 0]) {
+      h.commitLayout({ characterHeight: 180, characterCenter: 405, characterTop: 140, sideProgress: factor });
+      const shift = Number.parseFloat(h.scene.style['--descent-shift'] || '0');
+      assert.ok(Math.abs(shift - fullShift * factor) < .01,
+        `Side layout ignored its displayed progress ${factor}`);
+      for (const detail of [h.intro, h.status]) {
+        const expectedX = (810 / 2 + 24 / 2 - (810 / 2 - 100)) * factor;
+        const x = Number.parseFloat(detail.style.translate || '0');
+        assert.ok(Math.abs(x - expectedX) < .01, `Copy jumped at displayed progress ${factor}`);
+      }
+      assert.equal(h.actor.dataset.pose, pose);
+    }
+    h.cleanup();
+  }],
+  ['the route follows continuous hero height rather than jumping by a whole rung', async () => {
+    const h = makeHarness({ withSubscribedLayout: true });
+    await h.ready();
+    assert.equal(h.route().total, 780);
+    for (const height of [779.8, 780.1, 780.4, 780.8, 781.2]) {
+      h.commitLayout({ heroHeight: height, characterHeight: 220, sideProgress: 1 });
+      assert.ok(Math.abs(h.route().total - height) < .01, 'Route endpoint snapped onto a rung');
+    }
+    h.cleanup();
+  }],
+  ['displayed sprite resizing appends and removes only trailing ladder tiles', async () => {
+    const h = makeHarness({ withSubscribedLayout: true });
+    await h.ready();
+    await h.scrollTo(h.route().pitch * 3);
+    await h.tick();
+    await h.tick(200);
+    const pose = h.actor.dataset.pose;
+    const calls = h.animationCalls.length;
+    let tiles = [...h.strip.children];
+    let countChanges = 0;
+    for (const height of [215, 210, 200, 190, 180, 190, 200, 210, 220]) {
+      h.commitLayout({ characterHeight: height, sideProgress: 1 });
+      const next = [...h.strip.children];
+      const shared = Math.min(tiles.length, next.length);
+      if (tiles.length !== next.length) countChanges++;
+      assert.deepEqual(next.slice(0, shared), tiles.slice(0, shared),
+        `Resizing to ${height}px replaced visible ladder tiles`);
+      assert.equal(h.strip.replacements, 0, 'Resize rebuilt the complete decoded ladder strip');
+      assert.equal(h.actor.dataset.pose, pose);
+      assert.equal(h.scene.dataset.state, 'climbing');
+      assert.equal(h.route().total, 780, 'Sprite size changed the route endpoint');
+      tiles = next;
+    }
+    assert.ok(countChanges >= 4, 'Fixture never crossed enough ladder tile boundaries');
+    assert.equal(h.animationCalls.length, calls, 'Tile count changes replayed a turn');
+    h.cleanup();
+  }],
+  ['resize commits actor, ladder, and copy geometry in the same event', async () => {
+    const h = makeHarness();
+    await h.ready();
+    await h.scrollTo(h.route().pitch * 3);
+    await h.tick();
+    await h.tick(200);
+    const pose = h.actor.dataset.pose;
+    const animations = h.animationCalls.length;
+    h.queueScroll(h.window.scrollY);
+    assert.equal(h.pendingFrames, 1);
+    h.resizeNow(810, 780);
+    const unit = 180 / 1180;
+    const center = 810 / 2;
+    assert.ok(Math.abs(Number.parseFloat(h.actor.style.left) + 524 * unit / 2 - center) < .01,
+      'Resize left the old actor width or position until a later frame');
+    assert.ok(Math.abs(Number.parseFloat(h.ladder.style.left)
+      + 374 * unit * 380 / 299 / 2 - center) < .01,
+    'Presentation observed a ladder out of alignment with the actor');
+    assert.equal(h.scene.style['--descent-shift'], undefined, 'Desktop retained an old mobile offset');
+    assert.equal(h.intro.style.translate, undefined);
+    assert.equal(h.status.style.translate, undefined);
+    assert.equal(h.actor.dataset.pose, pose);
+    assert.equal(h.scene.dataset.state, 'climbing');
+    assert.equal(h.pendingFrames, 1, 'Resize retained a stale render beside its anchoring guard');
+    await h.tick();
+    assert.equal(h.pendingFrames, 0, 'The resize transaction left deferred geometry work');
+    assert.equal(h.animationCalls.length, animations);
+    for (const width of [809, 650, 430, 810]) {
+      h.resizeNow(width, 780);
+      const spriteUnit = Number.parseFloat(h.scene.style['--sprite-unit']);
+      const xUnit = Number.parseFloat(h.scene.style['--ladder-x-unit']);
+      const yUnit = Number.parseFloat(h.scene.style['--ladder-y-unit']);
+      assert.ok(Math.abs(Number.parseFloat(h.actor.style.left) + 524 * spriteUnit / 2
+        - Number.parseFloat(h.ladder.style.left) - 374 * xUnit / 2) < .01,
+      `Ladder and actor centers diverged at ${width}px`);
+      assert.ok(Math.abs(217 * yUnit - h.route().pitch) < .01,
+        `The resized rung strip no longer matches the route at ${width}px`);
+      assert.ok(Math.abs(224 * spriteUnit - h.route().pitch) < .01,
+        `The resized climbing sprite no longer matches rung spacing at ${width}px`);
+      assert.equal(h.actor.dataset.pose, pose);
+    }
+    assert.equal(h.animationCalls.length, animations, 'Resize invented a turn gesture');
+    h.cleanup();
+  }],
+  ['width changes preserve the current climbing pose without redeploying the scene', async () => {
+    const h = makeHarness();
+    await h.ready();
+    await h.scrollTo(h.route().pitch * 3);
+    await h.tick();
+    await h.tick(200);
+    const pose = h.actor.dataset.pose;
+    const animations = h.animationCalls.length;
+    const visibility = h.visibilityChanges.length;
+    const builds = h.strip.replacements;
+    const tiles = [...h.strip.children];
+    await h.resize(410, 780);
+    assert.equal(h.strip.replacements, builds, 'A small width change rebuilt identical ladder tiles');
+    assert.deepEqual(h.strip.children, tiles, 'A small width change replaced the loaded ladder nodes');
+    for (const width of [430, 809, 810, 809, 390]) {
+      await h.resize(width, 780);
+      assert.equal(h.scene.dataset.state, 'climbing', `Resize redeployed the scene at ${width}px`);
+      assert.equal(h.actor.dataset.pose, pose, `Resize changed the stationary step at ${width}px`);
+      assert.equal(h.scene.hidden, false, 'Resize hid the visible foreground');
+      assert.equal(h.hero.classList.contains('descent-active'), true);
+      if (width <= 809) {
+        for (const element of [h.intro, h.status]) {
+          const bounds = element.getBoundingClientRect();
+          assert.ok(bounds.left > width / 2 && bounds.right <= width - 16 + 0.01,
+            'Repeated resize measured text with its previous scroll offset');
+        }
+      }
+    }
+    assert.equal(h.visibilityChanges.length, visibility, 'Resize exchanged the hero and foreground');
+    assert.equal(h.animationCalls.length, animations, 'Resize replayed a turn or speech animation');
+    await h.scrollTo(h.route().pitch * 4);
+    assert.equal(h.actor.dataset.pose, 'a', 'Scroll did not resume the normal rung sequence');
+    h.cleanup();
+  }],
+  ['width changes keep a valid landed endpoint visible without replaying arrival', async () => {
+    const h = makeHarness();
+    await landed(h);
+    const animations = h.animationCalls.length;
+    const visibility = h.visibilityChanges.length;
+    for (const width of [410, 809, 810, 809, 390]) {
+      await h.resize(width, 780);
+      await h.tick(200);
+      assert.equal(h.scene.dataset.state, 'landed', `Width ${width}px restarted arrival`);
+      assert.equal(h.actor.dataset.pose, 'front');
+      assert.equal(h.scene.classList.contains('is-landed'), true);
+      assert.equal(h.scene.hidden, false);
+    }
+    assert.equal(h.visibilityChanges.length, visibility, 'Resize flashed the original hero');
+    assert.equal(h.animationCalls.length, animations, 'Resize replayed arrival');
+    h.cleanup();
+  }],
+  ['width changes preserve an in-progress landing turn and its original timing', async () => {
+    const h = makeHarness();
+    await h.ready();
+    await h.scrollTo(h.route().total);
+    assert.equal(h.scene.dataset.state, 'landing');
+    const turn = h.animationCalls.at(-1);
+    const calls = h.animationCalls.length;
+    const visibility = h.visibilityChanges.length;
+    await h.resize(410, 780);
+    assert.equal(h.scene.dataset.state, 'landing');
+    assert.equal(turn.cancelled, false, 'Width resize cancelled a valid landing');
+    assert.equal(h.animationCalls.length, calls, 'Width resize replaced the landing turn');
+    assert.equal(h.visibilityChanges.length, visibility, 'Width resize hid the active turn');
+    await h.tick(140);
+    assert.equal(h.scene.dataset.state, 'landed', 'Width resize delayed the arrival');
+    assert.equal(h.actor.dataset.pose, 'front');
+    h.cleanup();
+  }],
+  ['width changes preserve the first turn toward the ladder', async () => {
+    const h = makeHarness();
+    await h.ready();
+    await h.scrollTo(h.route().pitch * 2);
+    await h.tick();
+    assert.equal(h.scene.dataset.state, 'deploying');
+    const turn = h.animationCalls.at(-1);
+    const calls = h.animationCalls.length;
+    const visibility = h.visibilityChanges.length;
+    await h.resize(410, 780);
+    assert.equal(turn.cancelled, false, 'Width resize cancelled the initial turn');
+    assert.equal(h.animationCalls.length, calls, 'Width resize replayed the initial turn');
+    assert.equal(h.visibilityChanges.length, visibility, 'Width resize hid the deploying scene');
+    await h.tick(140);
+    assert.equal(h.scene.dataset.state, 'climbing');
+    assert.ok(['a', 'b'].includes(h.actor.dataset.pose));
+    h.cleanup();
+  }],
+  ['a larger resized route keeps its endpoint mode until deliberate scrolling resumes', async () => {
+    const h = makeHarness();
+    await landed(h);
+    const position = h.window.scrollY;
+    const animations = h.animationCalls.length;
+    const visibility = h.visibilityChanges.length;
+    await h.resize(810, 900, 900);
+    assert.ok(h.route().total > position, 'Fixture did not move the endpoint beyond the current scroll');
+    assert.equal(h.window.scrollY, position, 'Resize changed the user scroll position');
+    assert.equal(h.scene.dataset.state, 'landed');
+    assert.equal(h.actor.dataset.pose, 'front');
+    assert.equal(h.scene.classList.contains('is-landed'), true);
+    assert.equal(h.animationCalls.length, animations, 'Route resize invented another turn gesture');
+    assert.equal(h.visibilityChanges.length, visibility, 'Route resize exchanged the foreground');
+    await h.tick(200);
+    assert.equal(h.scene.dataset.state, 'landed', 'A later idle frame reopened the ladder');
+    await h.scrollTo(position + 10);
+    await h.tick(200);
+    assert.equal(h.scene.dataset.state, 'climbing', 'Deliberate scroll did not resume the resized route');
+    assert.ok(['a', 'b'].includes(h.actor.dataset.pose));
+    assert.equal(h.scene.classList.contains('is-landed'), false);
+    await h.scrollTo(h.route().total);
+    await h.tick(200);
+    assert.equal(h.scene.dataset.state, 'landed', 'The recalculated endpoint did not remain reachable');
+    h.cleanup();
+  }],
+  ['resize scroll anchoring preserves the landed mode without moving native scroll', async () => {
+    const h = makeHarness();
+    await landed(h);
+    const calls = h.animationCalls.length;
+    const position = h.window.scrollY;
+    h.resizeNow(810, 900, 900);
+    const anchoredScroll = position + 30;
+    h.queueScroll(anchoredScroll);
+    await h.tick();
+    await h.tick(200);
+    assert.equal(h.window.scrollY, anchoredScroll, 'The resize guard overrode native scroll anchoring');
+    assert.equal(h.scene.dataset.state, 'landed', 'Browser anchoring reopened the ladder');
+    assert.equal(h.actor.dataset.pose, 'front');
+    assert.equal(h.animationCalls.length, calls, 'Browser anchoring replayed a turn');
+    await h.scrollTo(anchoredScroll - h.route().pitch * 1.5);
+    await h.tick(200);
+    assert.equal(h.scene.dataset.state, 'climbing', 'A deliberate reverse scroll remained locked');
+    h.cleanup();
+  }],
+  ['a shorter resize route does not make a stationary climbing avatar arrive', async () => {
+    const h = makeHarness();
+    await h.ready();
+    await h.scrollTo(h.route().total - h.route().pitch * 2);
+    await h.tick();
+    await h.tick(200);
+    const position = h.window.scrollY;
+    const pose = h.actor.dataset.pose;
+    const calls = h.animationCalls.length;
+    await h.resize(810, 390, 390);
+    assert.ok(h.route().total < position, 'Fixture did not shorten the route below the stationary scroll');
+    assert.equal(h.scene.dataset.state, 'climbing', 'Resize invented a bottom arrival');
+    assert.equal(h.actor.dataset.pose, pose, 'Resize replaced the stationary climbing pose');
+    await h.tick(200);
+    assert.equal(h.animationCalls.length, calls, 'Resize started a delayed arrival');
+    await h.scrollTo(h.window.scrollY + 10);
+    await h.tick(200);
+    assert.equal(h.scene.dataset.state, 'landed', 'Real scrolling could no longer reach arrival');
+    h.cleanup();
+  }],
+  ['width changes preserve the return turn and replay the speech once', async () => {
+    const h = makeHarness();
+    await landed(h);
+    await h.scrollTo(0);
+    assert.equal(h.scene.dataset.state, 'returning');
+    const turn = h.animationCalls.at(-1);
+    const calls = h.animationCalls.length;
+    await h.resize(410, 780);
+    assert.equal(h.scene.dataset.state, 'returning');
+    assert.equal(turn.cancelled, false, 'Width resize cancelled the return turn');
+    assert.equal(h.animationCalls.length, calls, 'Width resize replayed the return turn');
+    await h.tick(200);
+    assert.equal(h.scene.hidden, true);
+    assert.equal(h.hero.classList.contains('descent-active'), false);
+    assert.equal(h.animationCalls.filter(call => call.name === 'speech').length, 1);
+    assert.equal(h.scene.style['--descent-shift'], undefined);
+    assert.equal(h.status.style.translate, undefined);
     h.cleanup();
   }],
   ['the descent belongs to a clipped journey before the contact section', async () => {
@@ -579,9 +924,13 @@ const tests = [
     const h = makeHarness();
     await h.ready();
     const total = h.route().total;
-    const builds = h.strip.replacements;
+    const tiles = [...h.strip.children];
     await h.resize(844, 390, 390);
-    assert.ok(h.strip.replacements > builds, 'Orientation did not rebuild ladder layout');
+    assert.notEqual(h.strip.childElementCount, tiles.length, 'Orientation did not update ladder extent');
+    assert.deepEqual(h.strip.children.slice(0, Math.min(tiles.length, h.strip.childElementCount)),
+      tiles.slice(0, Math.min(tiles.length, h.strip.childElementCount)),
+      'Orientation replaced visible leading ladder tiles');
+    assert.equal(h.strip.replacements, 0, 'Orientation rebuilt the complete strip');
     assert.notEqual(h.route().total, total, 'Orientation retained obsolete scroll length');
     assert.ok(h.route().total > 0);
     h.cleanup();

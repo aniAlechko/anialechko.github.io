@@ -9,6 +9,7 @@ function makeHarness(initialScroll) {
   let now = 0;
   let frameId = 0;
   const frames = new Map();
+  let scrollWrites = 0;
   const events = new Map();
   const mediaEvents = new Map();
   const reducedMotion = {
@@ -20,7 +21,7 @@ function makeHarness(initialScroll) {
   const window = {
     scrollY: initialScroll,
     innerHeight: 800,
-    scrollTo({ top }) { this.scrollY = top; },
+    scrollTo({ top }) { scrollWrites++; this.scrollY = top; },
     addEventListener(type, listener) { events.set(type, listener); },
     removeEventListener(type) { events.delete(type); },
   };
@@ -60,7 +61,9 @@ function makeHarness(initialScroll) {
     assert.equal(frames.size, 0, 'Scroll did not settle');
   }
   return {
-    wheel, advance, finish, window, controller, events, mediaEvents,
+    wheel, advance, finish, window, page, controller, events, mediaEvents,
+    get pendingFrames() { return frames.size; },
+    get scrollWrites() { return scrollWrites; },
     emit: (type, event = {}) => events.get(type)?.(event),
     setReducedMotion(value) {
       reducedMotion.matches = value;
@@ -156,6 +159,111 @@ const tests = [
     assert.equal(result.prevented, false);
     assert.equal(result.target, null);
     assert.equal(h.window.scrollY, 380);
+  }],
+  ['resizing preserves active wheel momentum without moving the page immediately', () => {
+    const h = makeHarness(120);
+    const destination = h.wheel(240).target;
+    h.advance(3);
+    const before = h.window.scrollY;
+    const writes = h.scrollWrites;
+    h.window.innerHeight = 700;
+    h.emit('resize');
+    assert.equal(h.controller.getTarget(), destination, 'Resize discarded the pending destination');
+    assert.equal(h.window.scrollY, before);
+    assert.equal(h.scrollWrites, writes, 'Resize wrote a new scroll position');
+    h.advance();
+    assert.ok(h.window.scrollY > before && h.window.scrollY < destination,
+      'The original wheel ease did not continue after resize');
+    h.finish();
+    assert.equal(h.window.scrollY, destination);
+  }],
+  ['repeated resizes retain one wheel ease and realign its destination to the new rung grid', () => {
+    const h = makeHarness(120);
+    h.wheel(360);
+    h.advance(2);
+    for (let index = 0; index < 6; index++) {
+      h.window.innerHeight = 720 + index * 10;
+      h.emit('resize');
+      h.controller.setRoute({ pitch: 48, total: 1200 });
+      assert.ok(h.controller.getTarget() > h.window.scrollY, 'Resize stopped forward momentum');
+      assert.equal(h.controller.getTarget() % 48, 0, 'Target remained on the old rung grid');
+      assert.ok(h.pendingFrames <= 2, 'Repeated resize added overlapping animation work');
+      h.advance();
+    }
+    const destination = h.controller.getTarget();
+    h.finish();
+    assert.equal(h.window.scrollY, destination);
+  }],
+  ['browser scroll anchoring during resize is adopted without cancelling wheel inertia', () => {
+    const h = makeHarness(240);
+    const destination = h.wheel(240).target;
+    h.advance(2);
+    h.emit('resize');
+    h.window.scrollY += 7;
+    h.emit('scroll');
+    assert.equal(h.controller.getTarget(), destination, 'Synchronous anchoring cancelled momentum');
+    h.advance();
+    h.window.scrollY += 5;
+    h.emit('scroll');
+    assert.equal(h.controller.getTarget(), destination, 'Deferred anchoring cancelled momentum');
+    const anchoredAt = h.window.scrollY;
+    h.advance();
+    assert.ok(h.window.scrollY > anchoredAt, 'The ease did not adopt the anchored position');
+    h.finish();
+    assert.equal(h.window.scrollY, destination);
+  }],
+  ['idle toolbar resizes leave native scrolling untouched and start no animation', () => {
+    const h = makeHarness(430);
+    h.window.innerHeight = 740;
+    h.emit('resize');
+    h.window.scrollY = 455;
+    h.emit('scroll');
+    h.window.innerHeight = 800;
+    h.emit('resize');
+    assert.equal(h.controller.getTarget(), null);
+    assert.equal(h.pendingFrames, 0);
+    assert.equal(h.scrollWrites, 0);
+    assert.equal(h.window.scrollY, 455);
+  }],
+  ['explicit user input cancels wheel inertia even during the resize anchor window', () => {
+    for (const takeOver of [
+      h => h.emit('touchstart'),
+      h => h.emit('pointerdown'),
+      h => h.emit('keydown', { key: 'Home' }),
+      h => assert.equal(h.wheel(18).prevented, false),
+      h => h.setReducedMotion(true),
+    ]) {
+      const h = makeHarness(240);
+      h.wheel(240); h.advance(2); h.emit('resize');
+      const before = h.window.scrollY;
+      const writes = h.scrollWrites;
+      takeOver(h);
+      assert.equal(h.controller.getTarget(), null);
+      assert.equal(h.pendingFrames, 0, 'Takeover left the resize anchor window running');
+      h.finish();
+      assert.equal(h.window.scrollY, before);
+      assert.equal(h.scrollWrites, writes);
+    }
+  }],
+  ['external scrolling cancels wheel inertia after the resize anchor window ends', () => {
+    const h = makeHarness(240);
+    h.wheel(240); h.emit('resize'); h.advance(2);
+    h.window.scrollY += 25;
+    const before = h.window.scrollY;
+    h.emit('scroll');
+    assert.equal(h.controller.getTarget(), null);
+    h.finish();
+    assert.equal(h.window.scrollY, before);
+  }],
+  ['resizing clamps pending inertia to the new page boundary', () => {
+    const h = makeHarness(2900);
+    assert.ok(h.wheel(240).target > 2900);
+    h.page.scrollHeight = 3400;
+    h.window.scrollY = 2600;
+    h.emit('resize');
+    h.controller.setRoute(route);
+    h.finish();
+    assert.equal(h.window.scrollY, 2600);
   }],
   ['touch input stops the wheel animation without moving the page', () => {
     const h = makeHarness(560);

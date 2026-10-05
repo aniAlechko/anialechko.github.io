@@ -231,7 +231,7 @@ export function initDescent({
       }
       strip.append(fragment);
     }
-    onLayout({ pitch, total, heroHeight, arrivalBottom, landedActorTop: top + landingDrop });
+    onLayout({ pitch, total, heroHeight, arrivalBottom });
     return true;
   }
 

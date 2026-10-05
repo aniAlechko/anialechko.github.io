@@ -15,13 +15,16 @@ export function initFooterFish() {
     video.preload = 'auto';
     video.disablePictureInPicture = true;
     video.setAttribute('playsinline', '');
-    const angle = index ? 12 * Math.PI / 180 : 0;
+    const angle = (index ? 33 : 0) * Math.PI / 180;
     return { video, index, name, phase: index ? .26 : 0, rate: index ? .94 : 1, aspect: 1,
+      baseAngle: angle, layoutCosine: Math.cos(angle), layoutSine: Math.sin(angle),
       cosine: Math.cos(angle), sine: Math.sin(angle),
+      swim: createSwim(angle, index),
       envelope: [.06, .04, .94, .96],
       ready: false, displayed: false, failed: false, decoded: 0, uploaded: -1,
       frameRequest: 0, frameEvents: typeof video.requestVideoFrameCallback === 'function' };
   });
+  const anchors = [new Float32Array(4), new Float32Array(4)];
   const placements = [new Float32Array(4), new Float32Array(4)];
   const pointer = { x: .5, y: .5, targetX: .5, targetY: .5 };
   const waterField = createWaterField();
@@ -98,8 +101,8 @@ export function initFooterFish() {
         }
       }
       color = pow(color, vec3(.9));
-      float circle = 1.0 - smoothstep(.38, .49, length(fract(grid) - .5));
-      outColor = vec4(color * (.06 + .94 * circle), 1.0);
+      float circle = 1.0 - smoothstep(.29, .40, length(fract(grid) - .5));
+      outColor = vec4(color * circle, 1.0);
     }`;
 
   function initializeGL() {
@@ -176,34 +179,26 @@ export function initFooterFish() {
     width = Math.max(1, Math.round(bounds.width));
     height = Math.max(1, Math.round(bounds.height));
     dpr = Math.min(2, window.devicePixelRatio || 1);
-    cell = clamp(width / 600, 1.8, 2.8);
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-    const portrait = width < 720 || width <= window.innerHeight;
+    cell = clamp(width / 64, 5, 6.5);
+    const pixelWidth = Math.round(width * dpr), pixelHeight = Math.round(height * dpr);
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    const blend = clamp((1100 - width) / 340, 0, 1);
+    const compact = blend * blend * (3 - 2 * blend);
+    const mix = (wide, narrow) => wide + (narrow - wide) * compact;
     const edge = clamp(Math.min(width, height) * .022, 10, 24);
-    const margin = Math.min(width, height) * .012;
     const copyBounds = copy?.getBoundingClientRect();
-    const center = copyBounds ? copyBounds.top - bounds.top + copyBounds.height / 2 : height / 2;
     const copyTop = copyBounds ? copyBounds.top - bounds.top : height * .32;
     const copyBottom = copyBounds ? copyBounds.bottom - bounds.top : height * .68;
     const top = Math.max(edge, (header?.getBoundingClientRect().height || 0) + 8);
     const detailsTop = details?.getBoundingClientRect().top;
     const floor = Math.min(height - Math.max(edge, 32),
       Number.isFinite(detailsTop) ? detailsTop - bounds.top - 8 : height);
-    const regions = portrait ? [
-      [edge, top, width - edge, Math.min(center - 14, copyTop + height * .04)],
-      [edge, Math.max(center + 14, copyBottom - height * .025), width - edge, floor],
-    ] : [
-      [width * .49, top, width - edge, copyTop + height * .055],
-      [edge, copyBottom - height * .025, width * .51, floor],
-    ];
-    for (const [index, rect] of regions.entries()) {
-      const left = rect[0] + margin, top = rect[1] + margin;
-      const right = rect[2] - margin, bottom = rect[3] - margin;
-      const [x0, y0, x1, y1] = clips[index].envelope;
-      const { aspect, cosine, sine } = clips[index];
-      const baseline = Math.max(1, Math.min((right - left) / ((x1 - x0) * aspect),
-        (bottom - top) / (y1 - y0), window.innerHeight * .90));
+    // Text wrapping and footer labels must not change the fish's scale.
+    const sceneHeight = parseFloat(getComputedStyle(footer).minHeight) || height;
+    const swimmingHeight = Math.max(1, sceneHeight - 128);
+    for (const clip of clips) {
+      const { index, aspect, layoutCosine: cosine, layoutSine: sine, envelope: [x0, y0, x1, y1] } = clip;
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       for (const u of [x0, x1]) for (const v of [y0, y1]) {
         const x = (u - .5) * aspect, y = v - .5;
@@ -211,24 +206,109 @@ export function initFooterFish() {
         minX = Math.min(minX, rx); maxX = Math.max(maxX, rx);
         minY = Math.min(minY, ry); maxY = Math.max(maxY, ry);
       }
-      const hardLeft = edge + margin, hardRight = width - edge - margin;
-      const hardTop = index ? center + 14 : rect[1] + margin;
-      const hardBottom = index ? floor - margin : center - 14;
-      const sizeY = Math.max(1, Math.min(baseline * 1.24,
-        (hardRight - hardLeft) / (maxX - minX),
-        (hardBottom - hardTop) / (maxY - minY)));
-      const sizeX = sizeY * aspect;
-      placements[index].set([
-        clamp(index ? left - minX * sizeY : right - maxX * sizeY,
-          hardLeft - minX * sizeY, hardRight - maxX * sizeY),
-        clamp(index ? bottom - maxY * sizeY : top - minY * sizeY,
-          hardTop - minY * sizeY, hardBottom - maxY * sizeY),
-        sizeX, sizeY,
+      // Keep one scale ceiling across layouts; only the positions blend.
+      const sizeY = Math.min(
+        Math.max(width, 1100) * .66 / ((x1 - x0) * aspect),
+        swimmingHeight * .46 / (y1 - y0),
+        width * 1.5 / aspect,
+      );
+      const wideX = index ? edge - minX * sizeY : width - edge - maxX * sizeY;
+      const wideY = index ? floor - maxY * sizeY + clamp(height * .20, 112, 208) : top - minY * sizeY;
+      const narrowY = index ? Math.min(copyBottom + height * .045, floor - sizeY * .45)
+        : Math.max(top + sizeY * .16, copyTop - clamp(height * .10, 48, 100));
+      anchors[index].set([
+        mix(wideX, width * (index ? .28 : .70)),
+        mix(wideY, narrowY),
+        sizeY * aspect, sizeY,
       ]);
     }
     if (gl) gl.viewport(0, 0, canvas.width, canvas.height);
     else context.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw();
+  }
+
+  function nextWaypoint(fish) {
+    fish.bearing += fish.direction * (1.1 + Math.random() * .5);
+    const radius = .7 + Math.random() * .3;
+    return [Math.cos(fish.bearing) * radius, Math.sin(fish.bearing) * radius];
+  }
+
+  function createSwim(angle, index) {
+    const fish = { angle, x: 0, y: 0, elapsed: 0, duration: 10.5 + index * 2,
+      bearing: index ? .5 : Math.PI, direction: index ? -1 : 1,
+      pace: index ? .94 : 1, targetPace: index ? .94 : 1,
+      paceRemaining: index ? 3.8 : 1.2, rateElapsed: 0 };
+    const first = nextWaypoint(fish);
+    // Start moving from the layout anchor instead of spending the opening seconds at rest.
+    fish.points = [[-first[0], -first[1]], [0, 0], first, nextWaypoint(fish)];
+    return fish;
+  }
+
+  function updatePace(clip, dt) {
+    const fish = clip.swim;
+    fish.paceRemaining -= dt;
+    if (fish.paceRemaining <= 0) {
+      fish.targetPace = .88 + Math.random() * .34;
+      fish.paceRemaining = 7 + Math.random() * 6 + clip.index * .8;
+      const other = clips[1 - clip.index];
+      if (other.ready && !other.failed && !other.video.paused &&
+          Number.isFinite(clip.video.duration) && clip.video.duration > 0 &&
+          Number.isFinite(other.video.duration) && other.video.duration > 0) {
+        const difference = clip.video.currentTime / clip.video.duration -
+          other.video.currentTime / other.video.duration;
+        const gap = difference - Math.round(difference);
+        if (Math.abs(gap) < .12 && Math.abs(fish.targetPace - other.swim.pace) < .09) {
+          // Separate similar poses with a gradual tempo change, never a frame seek.
+          const direction = gap >= 0 ? 1 : -1;
+          let target = other.swim.pace + direction * .12;
+          if (target < .86 || target > 1.24) target = other.swim.pace - direction * .12;
+          fish.targetPace = clamp(target, .86, 1.24);
+        }
+      }
+    }
+    fish.pace += (fish.targetPace - fish.pace) * (1 - Math.exp(-dt / 2));
+    fish.rateElapsed += dt;
+    if (fish.rateElapsed >= .1) {
+      fish.rateElapsed %= .1;
+      if (Math.abs(clip.video.playbackRate - fish.pace) >= .005) {
+        clip.video.playbackRate = fish.pace;
+      }
+    }
+  }
+
+  function updateSwim(dt) {
+    for (const clip of clips) {
+      if (!clip.ready || clip.failed || clip.video.paused) continue;
+      const fish = clip.swim;
+      updatePace(clip, dt);
+      fish.elapsed += dt * fish.pace;
+      if (fish.elapsed >= fish.duration) {
+        fish.elapsed -= fish.duration;
+        fish.points.shift();
+        fish.points.push(nextWaypoint(fish));
+      }
+      const t = fish.elapsed / fish.duration;
+      const [p0, p1, p2, p3] = fish.points;
+      let vx = 0, vy = 0;
+      // Joined curves preserve velocity as each new wandering destination takes over.
+      for (let axis = 0; axis < 2; axis++) {
+        const a = -p0[axis] + p2[axis];
+        const b = 2 * p0[axis] - 5 * p1[axis] + 4 * p2[axis] - p3[axis];
+        const c = -p0[axis] + 3 * p1[axis] - 3 * p2[axis] + p3[axis];
+        const position = .5 * (2 * p1[axis] + t * (a + t * (b + t * c)));
+        const velocity = .5 * (a + t * (2 * b + t * 3 * c));
+        if (axis === 0) { fish.x = position; vx = velocity; }
+        else { fish.y = position; vy = velocity; }
+      }
+      const forward = -clip.layoutCosine * vx - clip.layoutSine * vy;
+      const cross = clip.layoutSine * vx - clip.layoutCosine * vy;
+      const turn = Math.tanh(2.4 * cross / (.35 + Math.abs(forward) * .65));
+      const range = (clip.index ? 28 : 34) * Math.PI / 180;
+      const target = clip.baseAngle + turn * range;
+      // Make the bend visible while limiting both its extent and its turning speed.
+      const maxTurn = 12 * Math.PI / 180 * dt;
+      fish.angle += clamp((target - fish.angle) * (1 - Math.exp(-dt * 2.2)), -maxTurn, maxTurn);
+    }
   }
 
   function draw2D() {
@@ -267,13 +347,21 @@ export function initFooterFish() {
         if (rgb[0] + rgb[1] + rgb[2] < .1) continue;
         context.fillStyle = `rgb(${rgb.map(value => 255 * (value / 255) ** .9).join(',')})`;
         context.beginPath();
-        context.arc(x, y, cell * .42, 0, Math.PI * 2);
+        context.arc(x, y, cell * .35, 0, Math.PI * 2);
         context.fill();
       }
     }
   }
   function draw() {
     if (disposed || !width || !height) return;
+    for (const clip of clips) {
+      const placement = placements[clip.index];
+      placement.set(anchors[clip.index]);
+      placement[0] += clip.swim.x * clamp(width * .08, 26, 96);
+      placement[1] += clip.swim.y * clamp(height * .072, 26, 68);
+      clip.cosine = Math.cos(clip.swim.angle);
+      clip.sine = Math.sin(clip.swim.angle);
+    }
     try {
       for (const clip of clips) {
         const decoded = clip.frameEvents ? clip.decoded : Math.floor(clip.video.currentTime * 60);
@@ -313,6 +401,7 @@ export function initFooterFish() {
     const dt = lastTime ? clamp((now - lastTime) / 1000, 0, .05) : 0;
     lastTime = now;
     waterTime += dt;
+    updateSwim(dt);
     const follow = 1 - Math.pow(.75, dt * 60);
     pointer.x += (pointer.targetX - pointer.x) * follow;
     pointer.y += (pointer.targetY - pointer.y) * follow;
@@ -330,7 +419,7 @@ export function initFooterFish() {
     } else {
       cancelAnimationFrame(frame);
       frame = lastTime = 0;
-      for (const clip of clips) { clip.video.pause(); clip.video.playbackRate = clip.rate; }
+      for (const clip of clips) clip.video.pause();
       if (visible && !document.hidden) draw();
     }
   }

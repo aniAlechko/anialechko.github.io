@@ -87,6 +87,13 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
       stop();
       return;
     }
+    const scroll = window.scrollY;
+    const activeTarget = frame ? target : scroll;
+    // Rung easing belongs to the descent; the lower sections scroll natively.
+    if (route && scroll > route.total && activeTarget > route.total) {
+      stop();
+      return;
+    }
     const now = performance.now();
     const sign = Math.sign(event.deltaY);
     // Touchpads already provide momentum. Keep their continuous gestures native.

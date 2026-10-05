@@ -4,13 +4,7 @@ export function initGarden() {
   const journey = document.querySelector('.journey');
   const hero = document.querySelector('.hero');
   if (!garden || !daylight || !journey || !hero) return { setRoute() {}, cleanup() {} };
-  const statementLines = [...document.querySelectorAll('.statement-line-text')];
   const statementStage = document.querySelector('#statement-stage');
-  const descent = document.querySelector('#descent-scene');
-  const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
-  const lineReveals = [];
-  let statementVisible = false;
-  let statementAnimations = [];
 
   let route;
   let ready = false;
@@ -22,54 +16,11 @@ export function initGarden() {
   let lastTop;
   let lastPlaying;
 
-  function setLineReveal(value) {
-    statementLines.forEach((line, index) => {
-      if (lineReveals[index] === value) return;
-      line.style.setProperty('--line-reveal', value);
-      lineReveals[index] = value;
-    });
-  }
-
-  function cancelStatementAnimations() {
-    for (const animation of statementAnimations) animation.cancel();
-    statementAnimations = [];
-  }
-
-  function resetStatement() {
-    cancelStatementAnimations();
-    if (statementVisible) garden.classList.remove('is-statement-visible');
-    statementVisible = false;
-    setLineReveal('0');
-  }
-
-  function revealStatement(animate) {
-    if (statementVisible) return;
-    statementVisible = true;
-    garden.classList.add('is-statement-visible');
-    setLineReveal('1');
-    if (!animate || motionPreference.matches) return;
-    statementAnimations = statementLines.map(line => line.animate([
-      { opacity: 0, transform: 'translateY(12px)' },
-      { opacity: 1, transform: 'translateY(0)' },
-    ], {
-      duration: 620,
-      easing: 'cubic-bezier(.22,1,.36,1)',
-      fill: 'both',
-    }));
-  }
-
   function render() {
     frame = 0;
     if (disposed || !ready) return;
     const scroll = Math.max(0, window.scrollY);
     const hold = route ? Math.max(0, Math.min(holdDistance, scroll - route.total)) : 0;
-    if (!route || motionPreference.matches) {
-      cancelStatementAnimations();
-      revealStatement(false);
-    } else if (scroll <= .5) resetStatement();
-    else if (!statementVisible && (descent ? descent.dataset.state === 'landed' : scroll >= route.total)) {
-      revealStatement(true);
-    }
     const playing = !document.hidden && scroll + window.innerHeight > gardenTop + hold
       && scroll < gardenTop + hold + gardenHeight ? 'running' : 'paused';
     if (playing !== lastPlaying) {
@@ -81,10 +32,6 @@ export function initGarden() {
   function schedule() {
     if (!disposed && !frame) frame = requestAnimationFrame(render);
   }
-  function motionChanged() {
-    if (motionPreference.matches) cancelStatementAnimations();
-    schedule();
-  }
   function measure() {
     if (!ready) return;
     const heroHeight = route?.heroHeight || hero.getBoundingClientRect().height;
@@ -95,9 +42,6 @@ export function initGarden() {
     journey.style.setProperty('--scene-pin-top', `${route ? -route.total : 0}px`);
     garden.style.height = `${gardenHeight}px`;
     garden.style.top = route ? `${heroHeight}px` : '0px';
-    if (Number.isFinite(route?.landedActorTop)) {
-      garden.style.setProperty('--garden-character-top', `${route.landedActorTop}px`);
-    } else garden.style.removeProperty('--garden-character-top');
     gardenTop = route ? heroHeight : garden.getBoundingClientRect().top + window.scrollY;
     const top = `${gardenTop.toFixed(2)}px`;
     if (top !== lastTop) {
@@ -106,12 +50,14 @@ export function initGarden() {
     }
     schedule();
   }
+  function resized() {
+    // Animated scene geometry arrives through setRoute after the hero lays out.
+    if (route) schedule();
+    else measure();
+  }
   window.addEventListener('scroll', schedule, { passive: true });
-  window.addEventListener('resize', measure, { passive: true });
+  window.addEventListener('resize', resized, { passive: true });
   document.addEventListener('visibilitychange', schedule);
-  motionPreference.addEventListener('change', motionChanged);
-  const descentObserver = descent ? new MutationObserver(schedule) : null;
-  descentObserver?.observe(descent, { attributes: true, attributeFilter: ['data-state'] });
 
   return {
     getHoldDistance: () => disposed ? 0 : holdDistance,
@@ -131,15 +77,11 @@ export function initGarden() {
       disposed = true;
       cancelAnimationFrame(frame);
       window.removeEventListener('scroll', schedule);
-      window.removeEventListener('resize', measure);
+      window.removeEventListener('resize', resized);
       document.removeEventListener('visibilitychange', schedule);
-      motionPreference.removeEventListener('change', motionChanged);
-      descentObserver?.disconnect();
-      resetStatement();
       journey.classList.remove('has-static-garden');
       journey.style.removeProperty('--scene-hold-distance');
       journey.style.removeProperty('--scene-pin-top');
-      garden.style.removeProperty('--garden-character-top');
       if (statementStage) statementStage.style.height = '0px';
       garden.hidden = true;
       daylight.hidden = true;

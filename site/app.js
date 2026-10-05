@@ -6,6 +6,7 @@ import { initGarden } from './garden.js';
 import { initFishing } from './fishing.js';
 import { initFooterFish } from './footer-fish.js';
 import { initFooterTitle } from './footer-title.js';
+import { initFooterActions } from './footer-actions.js';
 import { initFooterDetails } from './footer-details.js';
 
 const page = document.documentElement;
@@ -94,7 +95,12 @@ try {
   console.warn('Footer animation unavailable; contact links remain usable.', error);
 }
 try {
-  initFooterTitle();
+  initFooterActions();
+} catch (error) {
+  console.warn('Footer button transitions unavailable; contact links remain usable.', error);
+}
+try {
+  initFooterTitle({ subscribeLayout: responsiveLayout.subscribe });
 } catch (error) {
   console.warn('Footer title animation unavailable; the heading remains visible.', error);
 }

@@ -248,7 +248,7 @@ a:hover { color: #efee74; }
 .skip-intro .name-word, .skip-intro .hero-details, .skip-intro .character, .skip-intro .speech { animation: none !important; opacity: 1; }
 .skip-intro .speech-word { animation: none !important; transform: none; }
 
-@media (max-width: 800px) {
+@media (max-width: 809px) {
   .desktop-label { display: none; }
   .mobile-label { display: inline; }
   .email { left: 27%; transform: translateX(-50%); }
@@ -393,24 +393,18 @@ a:hover { color: #efee74; }
 .garden-statement {
   position: absolute;
   z-index: 2;
-  top: 46%;
+  top: calc(44% + clamp(0px, (100vw - 600px) * .0533, 16px) - clamp(0px, (700px - 100svh) * .1, 30px));
   left: 50%;
-  width: min(calc(100% - 32px), 1000px);
+  width: min(calc(100% - 2 * clamp(20px, 8px + 2vw, 32px)), 25em);
   margin: 0;
   transform: translate(-50%, -50%);
-  font-size: clamp(34px, min(3.8vw, 5.5svh), 54px);
-  line-height: 1.12;
-  letter-spacing: -.04em;
+  font-size: clamp(20px, min(max(clamp(26px, 7.2vw, 34px), 3.8vw), 5.2svh), 54px);
+  line-height: 1.1;
+  letter-spacing: -.035em;
   text-align: center;
   text-transform: uppercase;
-  text-wrap: balance;
+  text-wrap: pretty;
   pointer-events: auto;
-}
-.statement-line { display: block; }
-.garden-scene:not(.is-statement-visible) .garden-statement { visibility: hidden; }
-.statement-line-text {
-  display: block;
-  opacity: var(--line-reveal, 1);
 }
 .garden-rabbit {
   position: absolute;
@@ -459,33 +453,13 @@ a:hover { color: #efee74; }
   78% { translate: 0 -5px; }
 }
 @media (max-width: 600px) {
-  .garden-statement {
-    width: calc(100% - 32px);
-    font-size: clamp(28px, 8vw, 34px);
-    line-height: 1.04;
-    letter-spacing: -.035em;
-    top: min(46%, calc(var(--garden-character-top, calc(100% - var(--character-height) - 16px)) - 4.16em - 24px));
-    text-wrap: nowrap;
-  }
-  .statement-phrase { display: block; }
   .garden-rabbit--left { left: 17%; bottom: 4%; }
   .garden-rabbit--right { right: 15%; bottom: 10%; }
   .garden-grass { width: 16px; height: 10px; }
 }
-@media (max-height: 650px) and (min-aspect-ratio: 4/5) {
-  .garden-statement {
-    width: calc(100% - 32px);
-    top: min(36%, calc(var(--garden-character-top, calc(100% - var(--character-height) - 16px)) - 2.24em - 16px));
-    font-size: clamp(20px, min(5vw, 5.4svh), 28px);
-    line-height: 1.12;
-    text-wrap: balance;
-  }
-  .statement-phrase { display: inline; }
-}
 @media (prefers-reduced-motion: reduce) {
   .cloud-scene { display: none; }
   .garden-rabbit { animation: none; }
-  .statement-line-text { transform: none; opacity: 1; }
 }
 .landing {
   position: relative;
@@ -495,8 +469,9 @@ a:hover { color: #efee74; }
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  min-height: 100dvh;
-  padding: clamp(32px, 4svh, 56px) var(--page-edge);
+  min-height: 100svh;
+  padding: clamp(60px, 11svh, 104px) var(--page-edge)
+    max(clamp(64px, 14svh, 124px), calc(44px + env(safe-area-inset-bottom)));
   overflow: hidden;
   background: #000;
   color: #fff;
@@ -505,14 +480,16 @@ a:hover { color: #efee74; }
 .contact-copy {
   position: relative;
   z-index: 2;
-  width: 76%;
+  flex: none;
+  container-type: inline-size;
+  width: clamp(76%, calc(100% - (100vw - 900px) * .76), 100%);
   text-align: center;
 }
 .contact-copy h2 {
   margin: 0;
   font-family: 'Neue Montreal Display', Arial, sans-serif;
-  font-size: min(calc((100vw - 2 * var(--page-edge)) * .76 / 5.85), 23svh);
-  line-height: .9;
+  font-size: min(calc(100cqw / 5.85), max(32px, calc(25svh - 42px)));
+  line-height: .92;
   letter-spacing: -.025em;
 }
 .contact-copy h2 span {
@@ -523,40 +500,45 @@ a:hover { color: #efee74; }
 .contact-copy h2 span:first-child { transform: translateX(var(--footer-title-shift, 0px)); }
 .contact-copy h2 span:last-child { transform: translateX(calc(-1 * var(--footer-title-shift, 0px))); }
 .contact-actions {
-  display: flex;
-  justify-content: center;
-  gap: clamp(12px, 1.6vw, 24px);
+  --contact-work-column: 1.55fr;
+  display: grid;
+  grid-template-columns: minmax(0, var(--contact-work-column)) minmax(0, 1fr);
+  gap: clamp(12px, 2vw, 18px);
   width: min(100%, 1080px);
-  margin: clamp(22px, 2.3vw, 34px) auto 0;
+  margin: clamp(18px, min(calc(32px + 2vw), calc(12svh - 24px)), 56px) auto 0;
 }
 .contact-link {
   display: inline-flex;
-  flex: 1;
+  min-width: 0;
   align-items: center;
   justify-content: center;
   gap: clamp(8px, 1.2vw, 16px);
-  min-height: clamp(52px, 6.8vw, 82px);
+  min-height: clamp(46px, min(8svh, calc(46px + 4vw)), 82px);
   padding: 10px clamp(10px, 1.8vw, 18px);
-  border: 3px solid currentColor;
+  border: clamp(2px, .25vw, 3px) solid currentColor;
   border-radius: 999px;
-  font-size: clamp(16px, 2.8vw, 34px);
+  font-size: clamp(18px, min(calc(16px + 1.2vw), 4.5svh), 34px);
   line-height: 1;
   letter-spacing: -.035em;
   text-decoration: none;
   white-space: nowrap;
 }
-.contact-link--work { flex: 1.55; }
+.contact-actions.has-layout { position: relative; }
+.contact-actions.has-layout .contact-link { position: absolute; }
+@media (max-width: 600px) {
+  .contact-actions { grid-template-columns: minmax(0, 1fr); }
+}
 .contact-link svg { flex: none; width: 1.05em; height: 1.05em; }
 .contact-link:focus-visible { outline: 2px solid #fff; outline-offset: 5px; }
 .contact-details {
   position: absolute;
   z-index: 2;
   right: clamp(20px, 3vw, 44px);
-  bottom: max(clamp(18px, 3svh, 32px), env(safe-area-inset-bottom));
+  bottom: max(clamp(12px, 3svh, 32px), env(safe-area-inset-bottom));
   left: clamp(20px, 3vw, 44px);
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
   font-size: clamp(14px, 1.75vw, 22px);
   line-height: 1.1;
   letter-spacing: -.035em;
@@ -565,22 +547,6 @@ a:hover { color: #efee74; }
 }
 .contact-detail { display: flex; flex-direction: column; }
 .contact-detail:last-child { text-align: right; }
-@media (max-width: 600px) {
-  .contact-actions { gap: 10px; }
-  .contact-link { border-width: 2px; }
-}
-@media (max-width: 719px), (max-aspect-ratio: 1/1) {
-  .contact-copy { width: 100%; }
-  .contact-copy h2 { font-size: calc((100vw - 2 * var(--page-edge)) / 5.85); }
-}
-@media (max-width: 380px) {
-  .contact-actions { flex-direction: column; }
-  .contact-link { flex: none; width: 100%; font-size: 18px; }
-}
-@media (max-height: 500px) and (min-aspect-ratio: 6/5) {
-  .contact-actions { margin-top: 16px; }
-  .contact-link { min-height: 44px; font-size: clamp(16px, 2.8vw, 22px); }
-}
 @media (prefers-reduced-motion: reduce) {
   .contact-copy h2 span { transform: none; will-change: auto; }
 }

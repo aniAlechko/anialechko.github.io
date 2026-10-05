@@ -125,6 +125,7 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
   const listeners = new Set();
   let metrics = defaultMetrics;
   let layout;
+  let lastCommit;
   let entryPrepared = false;
   let disposed = false;
   let mode;
@@ -164,10 +165,31 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     frame = 0;
     commit(time);
   }
+  function continueTransition() {
+    if (transition && !frame) frame = requestAnimationFrame(animate);
+    else if (!transition && frame) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+    }
+  }
   function commit(time = performance.now(), size = viewport()) {
     if (disposed) return;
     mode ??= getMode(size.width, size.height);
-    layout = getHeroLayout({ ...size, metrics, ...displayedMode(time) });
+    // Morph the composition only while it is visible. An offscreen morph would
+    // keep moving the garden and footer after the viewport has already resized.
+    if (transition && hero.getBoundingClientRect().bottom <= 0) {
+      mode = { ...transition.target };
+      transition = undefined;
+    }
+    const currentMode = displayedMode(time);
+    if (lastCommit && lastCommit.width === size.width && lastCommit.height === size.height
+      && lastCommit.progress === currentMode.progress && lastCommit.sideProgress === currentMode.sideProgress
+      && lastCommit.metrics === metrics) {
+      continueTransition();
+      return;
+    }
+    lastCommit = { ...size, ...currentMode, metrics };
+    layout = getHeroLayout({ ...size, metrics, ...currentMode });
     hero.classList.add('layout-managed');
     hero.style.height = pixels(layout.height);
     hero.style.setProperty('--character-height', pixels(layout.character.height));
@@ -207,21 +229,21 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     }
     // Consumers read the same displayed geometry, before the browser paints.
     for (const listener of listeners) listener(layout);
-    if (transition && !frame) frame = requestAnimationFrame(animate);
-    else if (!transition && frame) {
-      cancelAnimationFrame(frame);
-      frame = 0;
-    }
+    continueTransition();
   }
   function resized() {
     if (disposed) return;
     const size = viewport();
+    // Mobile browser controls can resize innerHeight without changing 100svh.
+    // Leave the scene and its scroll anchor alone when the layout is unchanged.
+    if (lastCommit && lastCommit.width === size.width && lastCommit.height === size.height
+      && !(transition && reducedMotion?.matches)) return;
     const target = getMode(size.width, size.height);
     const time = performance.now();
     mode ??= target;
     const current = { ...displayedMode(time) };
     const destination = transition?.target || mode;
-    if (reducedMotion?.matches) {
+    if (reducedMotion?.matches || hero.getBoundingClientRect().bottom <= 0) {
       mode = target;
       transition = undefined;
     } else if (target.progress !== destination.progress || target.sideProgress !== destination.sideProgress) {

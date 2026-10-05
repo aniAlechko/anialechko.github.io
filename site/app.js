@@ -5,6 +5,8 @@ import { initClouds } from './clouds.js';
 import { initGarden } from './garden.js';
 import { initFishing } from './fishing.js';
 import { initFooterFish } from './footer-fish.js';
+import { initFooterTitle } from './footer-title.js';
+import { initFooterDetails } from './footer-details.js';
 
 const page = document.documentElement;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -90,6 +92,16 @@ try {
   initFooterFish();
 } catch (error) {
   console.warn('Footer animation unavailable; contact links remain usable.', error);
+}
+try {
+  initFooterTitle();
+} catch (error) {
+  console.warn('Footer title animation unavailable; the heading remains visible.', error);
+}
+try {
+  initFooterDetails();
+} catch (error) {
+  console.warn('Local time unavailable; contact details remain visible.', error);
 }
 try {
   clouds = initClouds({ getHoldDistance: () => garden?.getHoldDistance?.() ?? 0 });

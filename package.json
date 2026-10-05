@@ -7,7 +7,7 @@
     "dev": "node server.mjs",
     "start": "node server.mjs",
     "build": "node build.mjs",
-    "check": "node --check server.mjs && node --check build.mjs && node --check site/background.js && node --check site/app.js && node --check site/avatar-ladder.js && node --check site/smooth-scroll.js && node --check site/responsive-layout.js",
-    "test": "node tests/ladder.test.mjs && node tests/smooth-scroll.test.mjs && node tests/startup.test.mjs && node tests/responsive-layout.test.mjs"
+    "check": "node --check server.mjs && node --check build.mjs && node --check site/background.js && node --check site/app.js && node --check site/avatar-ladder.js && node --check site/smooth-scroll.js && node --check site/responsive-layout.js && node --check site/clouds.js && node --check site/garden.js && node --check site/fishing.js && node --check site/footer-fish.js",
+    "test": "node tests/ladder.test.mjs && node tests/smooth-scroll.test.mjs && node tests/startup.test.mjs && node tests/responsive-layout.test.mjs && node tests/clouds.test.mjs && node tests/garden.test.mjs && node tests/fishing.test.mjs && node tests/footer-fish.test.mjs"
   }
 }

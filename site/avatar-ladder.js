@@ -13,7 +13,6 @@ export function initDescent({
   const original = document.querySelector('.character');
   const speech = hero?.querySelector('.speech');
   const speechWords = [...hero?.querySelectorAll('.speech-word') || []];
-  const details = ['.hero-intro', '.status'].map(selector => hero?.querySelector(selector)).filter(Boolean);
   const stage = document.querySelector('#descent-stage');
   const scene = document.querySelector('#descent-scene');
   const ladder = scene?.querySelector('.descent-ladder');
@@ -49,11 +48,9 @@ export function initDescent({
   let speechRun = 0;
   let renderedPose;
   let renderedState;
-  let renderedSideProgress = null;
   let resizeAnchorFrame = 0;
   let preserveResizeMode = false;
   let unsubscribeLayout;
-  let layoutSideProgress = null;
 
   function setLanded(landed) {
     if (scene.classList.contains('is-landed') === landed) return;
@@ -65,66 +62,17 @@ export function initDescent({
     hero.classList.toggle('return-ready', ready);
   }
 
-  function resetSideLayout() {
-    scene.style.removeProperty('--descent-shift');
-    for (const detail of details) {
-      detail.style.removeProperty('translate');
-      detail.style.removeProperty('scale');
-      detail.style.removeProperty('transform-origin');
-    }
-    renderedSideProgress = null;
-  }
-
-  function measureSideLayout(bounds, unit, top, heroHeight, sideProgress) {
-    if (sideProgress <= 0) return null;
-    const edge = parseFloat(getComputedStyle(hero).paddingLeft) || 16;
-    const gap = clamp(window.innerWidth * .03, 12, 24);
-    const copyLeft = window.innerWidth / 2 + gap / 2;
-    const copyWidth = window.innerWidth - edge - copyLeft;
-    const center = bounds.left + bounds.width / 2;
-    // Reserve the left edge for the widest climbing pose, independent of the hero.
-    const shift = edge + 524 * unit / 2 - center;
-    const rows = details.map(element => {
-      const rect = element.getBoundingClientRect();
-      return { element, left: rect.left, top: rect.top + window.scrollY,
-        height: rect.height, scale: Math.min(1, copyWidth / rect.width) };
-    });
-    const copyHeight = rows.reduce((height, row) => height + row.height * row.scale, 0)
-      + Math.max(0, rows.length - 1) * 8;
-    let copyTop = Math.min(rows[0]?.top ?? heroHeight, heroHeight - edge - copyHeight);
-    for (const row of rows) {
-      row.x = copyLeft - row.left;
-      row.y = copyTop - row.top;
-      copyTop += row.height * row.scale + 8;
-      row.x *= sideProgress;
-      row.y *= sideProgress;
-      row.scale = 1 + (row.scale - 1) * sideProgress;
-    }
-    // Clear the copy before it scrolls into the feet; don't change the hero's flow.
-    const clearance = (rows[0]?.top ?? heroHeight) - (top + 1249 * unit);
-    return { shift: shift * sideProgress, rows, range: clamp(clearance * 2, 16, 120) };
-  }
-
-  function moveSideLayout(scroll) {
-    const layout = geometry?.sideLayout;
-    if (!layout) return;
-    const fraction = clamp(scroll / layout.range, 0, 1);
-    const progress = 1 - (1 - fraction) ** 3;
-    if (renderedSideProgress === progress) return;
-    scene.style.setProperty('--descent-shift', `${layout.shift * progress}px`);
-    for (const row of layout.rows) {
-      row.element.style.transformOrigin = 'left top';
-      row.element.style.translate = `${row.x * progress}px ${row.y * progress}px`;
-      row.element.style.scale = `${1 + (row.scale - 1) * progress}`;
-    }
-    renderedSideProgress = progress;
-  }
-
   function moveActor() {
     if (renderedTravel === travel) return;
     // Keep layout coordinates stable while scrolling; only composite the travel.
     actor.style.transform = `translate3d(0, ${travel}px, 0)`;
     renderedTravel = travel;
+  }
+
+  function actorTravel(scroll) {
+    const progress = clamp(scroll / geometry.total, 0, 1);
+    const dropProgress = progress * progress * (3 - 2 * progress);
+    return progress * geometry.total + dropProgress * geometry.landingDrop;
   }
 
   function cancelSpeechReplay() {
@@ -183,7 +131,6 @@ export function initDescent({
 
   function hideScene() {
     cancelTurn();
-    resetSideLayout();
     active = false;
     settledEndpoint = null;
     travel = 0;
@@ -221,13 +168,14 @@ export function initDescent({
     const jumpOffset = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
     const top = bounds.top + window.scrollY - jumpOffset;
     const pitch = 224 * unit;
-    const arrivalBottom = top + 1249 * unit + 16;
-    const sideProgress = layoutSideProgress ?? (window.innerWidth > 809 ? 0 : 1);
+    const stableHeight = parseFloat(getComputedStyle(hero).minHeight) || heroHeight;
+    const actorHeight = 1249 * unit;
+    const landingDrop = Math.max(0, stableHeight - clamp(stableHeight * .01, 6, 12) - actorHeight - top);
+    const arrivalBottom = top + landingDrop + actorHeight + 16;
     const tolerance = typeof subscribeLayout === 'function' ? .01 : .5;
     // A browser-toolbar resize is not a new layout. Keep the current pose,
     // ladder nodes, and arrival animation when the page itself has not moved.
     if (geometry && geometry.width === window.innerWidth
-      && geometry.sideProgress === sideProgress
       && Math.abs(geometry.heroHeight - heroHeight) < tolerance
       && Math.abs(geometry.unit * 1180 - bounds.height) < tolerance
       && Math.abs(geometry.center - center) < tolerance
@@ -235,25 +183,21 @@ export function initDescent({
       && Math.abs(geometry.top - top) < tolerance) {
       return;
     }
-    // Read the unshifted copy without restarting the current pose or turn.
-    // These compositor offsets are reapplied by render before the next paint.
-    resetSideLayout();
     if (!geometry) {
       hideScene();
       snapNext = true;
     }
-    // Arrive in the next screen, then let ordinary scrolling leave the avatar behind.
+    // Keep the original climb length and finish lower in the landing viewport.
     const total = heroHeight;
-    const steps = Math.max(1, Math.ceil(total / pitch));
+    const steps = Math.max(1, Math.ceil((total + landingDrop) / pitch));
     const xUnit = unit * 380 / 299;
     const yUnit = unit * 224 / 217;
     const foot = top + 1242 * unit;
     const ladderTop = foot - (Math.ceil(1242 / 224) + 1) * pitch - 108 * yUnit;
     const ladderEnd = total + arrivalBottom;
     const tileCount = Math.ceil((ladderEnd - ladderTop) / pitch);
-    const sideLayout = measureSideLayout(bounds, unit, top, heroHeight, sideProgress);
-    geometry = { unit, pitch, steps, total, top, center, heroHeight, sideLayout,
-      arrivalBottom, sideProgress, width: window.innerWidth };
+    geometry = { unit, pitch, steps, total, top, center, heroHeight, landingDrop,
+      arrivalBottom, width: window.innerWidth };
 
     scene.style.setProperty('--sprite-unit', `${unit}px`);
     scene.style.setProperty('--ladder-x-unit', `${xUnit}px`);
@@ -287,7 +231,7 @@ export function initDescent({
       }
       strip.append(fragment);
     }
-    onLayout({ pitch, total });
+    onLayout({ pitch, total, heroHeight, arrivalBottom, landedActorTop: top + landingDrop });
     return true;
   }
 
@@ -417,10 +361,8 @@ export function initDescent({
       const headingBottom = target === null ? !reversing : target >= bottom - 0.5;
       const preserveMode = active && (resizing || resizeAnchorFrame
         || (preserveResizeMode && !reversing && !descending));
-      travel = preserveMode && (turnDestination === 'bottom' || settledEndpoint === 'bottom')
-        ? geometry.total : Math.min(scroll, geometry.total);
+      travel = actorTravel(scroll);
       moveActor();
-      moveSideLayout(scroll);
       if (preserveMode) {
         preserveResizeMode = true;
         // A completed deployment still becomes climbing; geometry changes must
@@ -483,11 +425,8 @@ export function initDescent({
     if (!disposed && !frame) frame = requestAnimationFrame(() => render());
   }
 
-  function resized(layout) {
+  function resized() {
     if (disposed) return;
-    if (Number.isFinite(layout?.sideProgress)) {
-      layoutSideProgress = clamp(layout.sideProgress, 0, 1);
-    }
     needsMeasure = true;
     cancelAnimationFrame(frame);
     frame = 0;

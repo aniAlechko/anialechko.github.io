@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import { getHeroLayout } from '../site/responsive-layout.js';
 
 const modulePath = new URL('../site/avatar-ladder.js', import.meta.url);
 const source = await readFile(modulePath, 'utf8');
@@ -205,6 +206,7 @@ function makeHarness({ pendingImages = false, pendingLayout = false, largeViewpo
       createDocumentFragment: () => element('fragment'), createElement: element },
     matchMedia,
     getComputedStyle: item => ({ transform: item.style.transform || 'none',
+      minHeight: item === hero ? `${viewport.stableHeight}px` : '0px',
       paddingLeft: item === hero ? '16px' : '0px' }),
     DOMMatrixReadOnly: class { constructor() { this.m42 = 0; } },
     requestAnimationFrame(fn) { const id = nextId++; frames.set(id, fn); return id; },
@@ -312,94 +314,155 @@ async function landed(harness) {
   assert.equal(harness.actor.dataset.pose, 'front');
 }
 
+function assertCenteredDescentAndCopy(h, expectedCenter = h.window.innerWidth / 2) {
+  const unit = Number.parseFloat(h.scene.style['--sprite-unit']);
+  const ladderUnit = Number.parseFloat(h.scene.style['--ladder-x-unit']);
+  const shift = Number.parseFloat(h.scene.style['--descent-shift'] || '0');
+  assert.ok(Math.abs(Number.parseFloat(h.actor.style.left) + 524 * unit / 2 + shift - expectedCenter) < .01,
+    'The climbing avatar left the displayed hero axis');
+  assert.ok(Math.abs(Number.parseFloat(h.ladder.style.left) + 374 * ladderUnit / 2 + shift - expectedCenter) < .01,
+    'The ladder left the displayed hero axis');
+  assert.equal(shift, 0, 'Scrolling retained a side-column offset');
+  for (const [index, detail] of [h.intro, h.status].entries()) {
+    for (const property of ['translate', 'scale', 'transform', 'transformOrigin']) {
+      assert.equal(detail.style[property], undefined, `Scrolling changed the footer ${property}`);
+    }
+    const bounds = detail.getBoundingClientRect();
+    assert.equal(bounds.left, h.window.innerWidth / 2 - 100, 'Footer copy moved into a side column');
+    assert.equal(bounds.top + h.window.scrollY, 600 + index * 46, 'Footer copy moved within the document');
+    assert.equal(bounds.width, 200, 'Scrolling changed the footer width');
+    assert.equal(bounds.height, 38, 'Scrolling changed the footer height');
+  }
+}
+
 const tests = [
-  ['mobile columns develop only through scroll and return to the original hero', async () => {
+  ['the original descent length keeps the lower landing and exact return to the hero', async () => {
+    for (const [width, height] of [[390, 780], [992, 814], [1364, 900], [844, 390]]) {
+      const h = makeHarness(); await h.ready(); await h.resize(width, height, height);
+      const route = h.route();
+      const initialTop = h.actorDocumentTop();
+      const baseTop = h.actor.style.top;
+      const actorHeight = 1249 * Number.parseFloat(h.scene.style['--sprite-unit']);
+      const initialFeet = initialTop + actorHeight;
+      assert.equal(route.total, route.heroHeight, 'The descent no longer uses its original one-screen length');
+      await h.scrollTo(route.total / 2); await h.tick(200);
+      const middleTop = h.actorDocumentTop();
+      const middleFeet = middleTop + actorHeight - h.window.scrollY;
+      assert.ok(middleFeet > initialFeet, 'The character stayed at its original screen height during descent');
+      await h.scrollTo(route.total); await h.tick(200);
+      const feet = h.actorDocumentTop() + actorHeight - h.window.scrollY;
+      const bottomGap = Math.min(12, Math.max(6, height * .01));
+      assert.ok(Math.abs(feet - (height - bottomGap)) < .01,
+        `The landed feet are not near the lower screen edge at ${width}×${height}`);
+      assert.ok(feet < height && feet - actorHeight >= 0, 'The landed character is clipped by the viewport');
+      assert.equal(h.scene.dataset.state, 'landed');
+      assert.equal(h.actor.dataset.pose, 'front');
+      assert.equal(h.actor.style.top, baseTop, 'Lower landing rewrote the original hero anchor');
+      const ladderEnd = Number.parseFloat(h.ladder.style.top) + Number.parseFloat(h.ladder.style.height);
+      assert.ok(ladderEnd >= h.actorDocumentTop() + actorHeight, 'The ladder ends before the lowered feet');
+      await h.scrollTo(route.total / 2); await h.tick(200);
+      assert.ok(Math.abs(h.actorDocumentTop() - middleTop) < .01, 'Climbing back up retained the landing drop');
+      await h.scrollTo(0); await h.tick(200);
+      assert.equal(h.actorDocumentTop(), initialTop, 'Returning home jumped away from the original hero position');
+      assert.equal(h.scene.hidden, true);
+      h.cleanup();
+    }
+  }],
+  ['reported landing clearance matches the displayed avatar after responsive layout changes', async () => {
+    const h = makeHarness({ withSubscribedLayout: true }); await h.ready();
+    let previousHead;
+    for (const [width, height] of [[320, 568], [390, 844], [430, 932], [844, 390], [992, 814]]) {
+      const layout = getHeroLayout({ width, height });
+      await h.resize(width, height, height);
+      h.commitLayout({ characterTop: layout.character.top, characterHeight: layout.character.height,
+        characterCenter: layout.character.left + layout.character.width / 2 });
+      await h.tick();
+      const route = h.route();
+      assert.ok(Number.isFinite(route.landedActorTop), 'The route omitted the measured landing clearance');
+      if (previousHead !== undefined) assert.notEqual(route.landedActorTop, previousHead,
+        'Responsive layout retained the previous avatar clearance');
+      previousHead = route.landedActorTop;
+      await h.scrollTo(route.total); await h.tick(200);
+      const visibleTop = h.actorDocumentTop() - h.window.scrollY;
+      assert.ok(Math.abs(route.landedActorTop - visibleTop) < .01,
+        `Statement clearance disagrees with the landed avatar at ${width}×${height}`);
+      assert.equal(h.scene.dataset.state, 'landed');
+      assert.equal(route.total, route.heroHeight, 'Reporting clearance changed the descent length');
+      const routes = h.layouts.length;
+      await h.resize(width, height + 40, height);
+      assert.equal(h.layouts.length, routes, 'Toolbar-only resize changed the stable landing clearance');
+      assert.equal(h.route().landedActorTop, previousHead);
+    }
+    h.cleanup();
+  }],
+  ['rung poses follow the visible travel while the character moves lower', async () => {
+    const h = makeHarness(); await h.ready();
+    const route = h.route();
+    const initialTop = h.actorDocumentTop();
+    let differsFromScroll = false;
+    for (const progress of [.2, .35, .5, .65, .8]) {
+      await h.scrollTo(route.total * progress); await h.tick(200);
+      const actualStep = Math.round((h.actorDocumentTop() - initialTop) / route.pitch);
+      const scrollStep = Math.round(h.window.scrollY / route.pitch);
+      if (actualStep % 2 !== scrollStep % 2) differsFromScroll = true;
+      assert.equal(h.actor.dataset.pose, actualStep % 2 ? 'b' : 'a',
+        'The climbing pose follows scroll distance instead of the visible rung displacement');
+    }
+    assert.ok(differsFromScroll, 'Fixture did not exercise a visible travel step beyond the scroll step');
+    h.cleanup();
+  }],
+  ['mobile down and up scrolling keeps the avatar and ladder centered and footer copy unchanged', async () => {
     const h = makeHarness();
     await h.ready();
     const route = h.route();
-    const unit = Number.parseFloat(h.scene.style['--sprite-unit']);
-    const actorWidth = 524 * unit;
-    const baseLeft = Number.parseFloat(h.actor.style.left);
-    const baseTop = h.actor.style.top;
+    const actorLeft = h.actor.style.left;
+    const actorTop = h.actor.style.top;
     const ladderLeft = h.ladder.style.left;
     const ladderTop = h.ladder.style.top;
     const routeHeight = h.stage.style.height;
     const builds = h.strip.replacements;
-    const copy = [h.intro, h.status];
-    const baselineCopy = copy.map(element => element.getBoundingClientRect());
-    const shiftedLeft = () => baseLeft
-      + Number.parseFloat(h.scene.style['--descent-shift'] || '0');
-    assert.ok(Math.abs(baseLeft + actorWidth / 2 - h.window.innerWidth / 2) < 0.01,
-      'The foreground did not start at the centered hero avatar');
-    assert.equal(shiftedLeft(), baseLeft, 'Mobile columns appeared before scrolling');
-
-    await h.scrollTo(1);
-    assert.ok(shiftedLeft() < baseLeft && shiftedLeft() > 16,
-      'A small scroll jumped immediately to the left column');
-    const firstShift = shiftedLeft();
-    await h.scrollTo(route.pitch * 3);
-    await h.tick(200);
-    assert.ok(shiftedLeft() < firstShift, 'Further scroll did not complete the side layout');
-    assert.ok(Math.abs(shiftedLeft() - 16) < 0.01,
-      'The climbing avatar did not respect the left page edge');
-    for (const element of copy) {
-      const bounds = element.getBoundingClientRect();
-      assert.ok(bounds.left > h.window.innerWidth / 2,
-        'Copy did not move into the right half');
-      assert.ok(bounds.right <= h.window.innerWidth - 16 + 0.01,
-        'Copy exceeds the right page edge');
-      assert.ok(shiftedLeft() + actorWidth < bounds.left,
-        'The climbing avatar overlaps the text column');
+    const baselineCopy = [h.intro, h.status].map(element => element.getBoundingClientRect());
+    assertCenteredDescentAndCopy(h);
+    for (const position of [1, route.pitch * 3, route.total, h.contactStart(), h.maxScroll(),
+      route.total, route.pitch * 3, 1, 0]) {
+      await h.scrollTo(position);
+      assertCenteredDescentAndCopy(h);
+      await h.tick(200);
+      assertCenteredDescentAndCopy(h);
+      assert.equal(h.actor.style.left, actorLeft, 'Scrolling rewrote the base actor position');
+      assert.equal(h.actor.style.top, actorTop, 'Scrolling rewrote the base actor top');
+      assert.equal(h.ladder.style.left, ladderLeft, 'Scrolling rewrote the base ladder position');
+      assert.equal(h.ladder.style.top, ladderTop, 'Scrolling rewrote the base ladder top');
+      assert.equal(h.route(), route, 'Scrolling changed the rung route');
+      assert.equal(h.stage.style.height, routeHeight, 'Scrolling changed the document height');
+      assert.equal(h.strip.replacements, builds, 'Scrolling rebuilt the ladder');
     }
-    assert.equal(h.actor.style.left, `${baseLeft}px`, 'Scrolling rewrote the base actor position');
-    assert.equal(h.actor.style.top, baseTop, 'Scrolling rewrote the base actor top');
-    assert.equal(h.ladder.style.left, ladderLeft, 'Scrolling rewrote the base ladder position');
-    assert.equal(h.ladder.style.top, ladderTop, 'Scrolling rewrote the base ladder top');
-    assert.equal(h.route(), route, 'Side layout changed the rung route');
-    assert.equal(h.stage.style.height, routeHeight, 'Side layout changed the document height');
-    assert.equal(h.strip.replacements, builds, 'Side layout rebuilt the ladder');
-
-    await h.scrollTo(0);
-    await h.tick(200);
     assert.equal(h.scene.hidden, true, 'Return did not restore the original hero');
-    assert.equal(h.scene.style['--descent-shift'], undefined,
-      'Return retained a ladder offset');
-    for (const [index, element] of copy.entries()) {
+    for (const [index, element] of [h.intro, h.status].entries()) {
       assert.deepEqual(element.getBoundingClientRect(), baselineCopy[index],
-        'Return did not restore the original text layout');
-      assert.equal(element.style.translate, undefined, 'Return retained a text offset');
-      assert.equal(element.style.scale, undefined, 'Return retained a text scale');
-      assert.equal(element.style.transformOrigin, undefined, 'Return retained a text origin');
+        'Return did not preserve the original text layout');
     }
-    assert.equal(h.route(), route);
-    assert.equal(h.strip.replacements, builds);
     h.cleanup();
   }],
-  ['orientation clears mobile offsets on desktop and measures the restored copy on return', async () => {
+  ['orientation changes preserve the centered descent and natural footer throughout the journey', async () => {
     const h = makeHarness();
     await h.ready();
     await h.scrollTo(h.route().pitch * 3);
+    await h.tick();
     await h.tick(200);
-    assert.ok(Number.parseFloat(h.scene.style['--descent-shift']) < 0,
-      'Fixture did not enter the mobile side layout');
-    await h.resize(810, 390, 390);
-    assert.equal(h.scene.style['--descent-shift'], undefined,
-      'Desktop retained the mobile ladder offset');
-    for (const element of [h.intro, h.status]) {
-      assert.equal(element.style.translate, undefined, 'Desktop retained a text offset');
-      assert.equal(element.style.scale, undefined, 'Desktop retained a text scale');
-    }
-    await h.resize(809, 780, 780);
-    for (const element of [h.intro, h.status]) {
-      const bounds = element.getBoundingClientRect();
-      assert.ok(bounds.left > 809 / 2 && bounds.right <= 809 - 16 + 0.01,
-        'Returning to mobile used already shifted copy bounds');
+    assertCenteredDescentAndCopy(h);
+    const pose = h.actor.dataset.pose;
+    for (const [width, height] of [[810, 390], [809, 780], [390, 780], [844, 390], [390, 780]]) {
+      await h.resize(width, height, height);
+      assertCenteredDescentAndCopy(h);
+      assert.equal(h.actor.dataset.pose, pose, 'Orientation changed the climbing pose');
+      await h.scrollTo(h.route().pitch * 3);
+      assertCenteredDescentAndCopy(h);
     }
     await h.scrollTo(0);
     await h.tick(200);
     assert.equal(h.scene.hidden, true);
-    assert.equal(h.intro.getBoundingClientRect().left, 809 / 2 - 100,
-      'Resizing changed the original centered text position');
+    assertCenteredDescentAndCopy(h);
     h.cleanup();
   }],
   ['layout subscriptions measure displayed geometry synchronously and detach cleanly', async () => {
@@ -430,7 +493,7 @@ const tests = [
     h.commitLayout({ characterHeight: 190, sideProgress: 1 });
     assert.equal(h.originalReads, afterCleanup, 'A removed subscription still measured the character');
   }],
-  ['continuous displayed layout blends side columns without a width breakpoint jump', async () => {
+  ['continuous displayed layout follows the hero axis without introducing side columns', async () => {
     const h = makeHarness({ withSubscribedLayout: true });
     await h.ready();
     await h.scrollTo(h.route().pitch * 3);
@@ -438,29 +501,32 @@ const tests = [
     await h.tick(200);
     h.resizeNow(810, 780);
     const pose = h.actor.dataset.pose;
-    const unit = 180 / 1180;
-    const fullShift = 16 + 524 * unit / 2 - 810 / 2;
+    const animations = h.animationCalls.length;
+    h.commitLayout({ characterHeight: 180, characterCenter: 405, characterTop: 140, sideProgress: 0 });
+    const route = h.route();
     for (const factor of [0, .25, .5, .75, 1, .5, 0]) {
       h.commitLayout({ characterHeight: 180, characterCenter: 405, characterTop: 140, sideProgress: factor });
-      const shift = Number.parseFloat(h.scene.style['--descent-shift'] || '0');
-      assert.ok(Math.abs(shift - fullShift * factor) < .01,
-        `Side layout ignored its displayed progress ${factor}`);
-      for (const detail of [h.intro, h.status]) {
-        const expectedX = (810 / 2 + 24 / 2 - (810 / 2 - 100)) * factor;
-        const x = Number.parseFloat(detail.style.translate || '0');
-        assert.ok(Math.abs(x - expectedX) < .01, `Copy jumped at displayed progress ${factor}`);
-      }
+      assertCenteredDescentAndCopy(h, 405);
+      assert.equal(h.route(), route, `Side progress ${factor} changed the descent route`);
       assert.equal(h.actor.dataset.pose, pose);
     }
+    for (const [factor, center, height] of [[.25, 390, 190], [.5, 375, 200], [.75, 350, 210], [1, 330, 220]]) {
+      h.commitLayout({ characterHeight: height, characterCenter: center, characterTop: 140, sideProgress: factor });
+      assertCenteredDescentAndCopy(h, center);
+      assert.equal(h.actor.dataset.pose, pose, 'Following the displayed hero changed the climbing pose');
+    }
+    assert.equal(h.animationCalls.length, animations, 'Displayed layout changes restarted a turn');
     h.cleanup();
   }],
   ['the route follows continuous hero height rather than jumping by a whole rung', async () => {
     const h = makeHarness({ withSubscribedLayout: true });
     await h.ready();
     assert.equal(h.route().total, 780);
+    assert.equal(h.route().heroHeight, 780);
     for (const height of [779.8, 780.1, 780.4, 780.8, 781.2]) {
       h.commitLayout({ heroHeight: height, characterHeight: 220, sideProgress: 1 });
       assert.ok(Math.abs(h.route().total - height) < .01, 'Route endpoint snapped onto a rung');
+      assert.equal(h.route().heroHeight, height, 'Cloud geometry lost the unextended hero height');
     }
     h.cleanup();
   }],
@@ -555,18 +621,13 @@ const tests = [
       assert.equal(h.actor.dataset.pose, pose, `Resize changed the stationary step at ${width}px`);
       assert.equal(h.scene.hidden, false, 'Resize hid the visible foreground');
       assert.equal(h.hero.classList.contains('descent-active'), true);
-      if (width <= 809) {
-        for (const element of [h.intro, h.status]) {
-          const bounds = element.getBoundingClientRect();
-          assert.ok(bounds.left > width / 2 && bounds.right <= width - 16 + 0.01,
-            'Repeated resize measured text with its previous scroll offset');
-        }
-      }
+      assertCenteredDescentAndCopy(h);
     }
     assert.equal(h.visibilityChanges.length, visibility, 'Resize exchanged the hero and foreground');
     assert.equal(h.animationCalls.length, animations, 'Resize replayed a turn or speech animation');
     await h.scrollTo(h.route().pitch * 4);
-    assert.equal(h.actor.dataset.pose, 'a', 'Scroll did not resume the normal rung sequence');
+    const visibleStep = Math.round((h.actorDocumentTop() - Number.parseFloat(h.actor.style.top)) / h.route().pitch);
+    assert.equal(h.actor.dataset.pose, visibleStep % 2 ? 'b' : 'a', 'Scroll did not resume the visible rung sequence');
     h.cleanup();
   }],
   ['width changes keep a valid landed endpoint visible without replaying arrival', async () => {
@@ -636,6 +697,10 @@ const tests = [
     assert.equal(h.scene.classList.contains('is-landed'), true);
     assert.equal(h.animationCalls.length, animations, 'Route resize invented another turn gesture');
     assert.equal(h.visibilityChanges.length, visibility, 'Route resize exchanged the foreground');
+    const resizedTop = h.actorDocumentTop() - h.window.scrollY;
+    const resizedHeight = 1249 * Number.parseFloat(h.scene.style['--sprite-unit']);
+    assert.ok(resizedTop >= 0 && resizedTop + resizedHeight < h.window.innerHeight,
+      'Expanding the route pushed the parked character outside the viewport');
     await h.tick(200);
     assert.equal(h.scene.dataset.state, 'landed', 'A later idle frame reopened the ladder');
     await h.scrollTo(position + 10);
@@ -643,6 +708,9 @@ const tests = [
     assert.equal(h.scene.dataset.state, 'climbing', 'Deliberate scroll did not resume the resized route');
     assert.ok(['a', 'b'].includes(h.actor.dataset.pose));
     assert.equal(h.scene.classList.contains('is-landed'), false);
+    const resumedTop = h.actorDocumentTop() - h.window.scrollY;
+    assert.ok(Math.abs(resumedTop - resizedTop) < 10,
+      'The first small scroll after resize jumped from a forced endpoint position');
     await h.scrollTo(h.route().total);
     await h.tick(200);
     assert.equal(h.scene.dataset.state, 'landed', 'The recalculated endpoint did not remain reachable');
@@ -682,7 +750,7 @@ const tests = [
     assert.equal(h.actor.dataset.pose, pose, 'Resize replaced the stationary climbing pose');
     await h.tick(200);
     assert.equal(h.animationCalls.length, calls, 'Resize started a delayed arrival');
-    await h.scrollTo(h.window.scrollY + 10);
+    await h.scrollTo((h.route().total + h.maxScroll()) / 2);
     await h.tick(200);
     assert.equal(h.scene.dataset.state, 'landed', 'Real scrolling could no longer reach arrival');
     h.cleanup();
@@ -841,6 +909,7 @@ const tests = [
     const h = makeHarness();
     await landed(h);
     const route = h.route();
+    const parkedTop = h.actorDocumentTop();
     const builds = h.strip.replacements;
     const layoutCalls = h.layouts.length;
     const turns = h.animationCalls.length;
@@ -852,6 +921,7 @@ const tests = [
       assert.equal(h.scene.dataset.state, 'landed');
       assert.equal(h.actor.dataset.pose, 'front');
       assert.equal(h.scene.hidden, false);
+      assert.equal(h.actorDocumentTop(), parkedTop, 'Toolbar height changes moved the lowered landing');
       assert.ok(h.maxScroll() >= h.route().total - 0.5,
         'Toolbar expansion made the bottom of the route unreachable');
     }
@@ -1004,7 +1074,7 @@ const tests = [
     await h.ready();
     const { pitch, total } = h.route();
     for (const [position, delta, destination, state] of [
-      [total - pitch * 1.1, 40, total, 'landing'],
+      [total - pitch * 1.01, 40, total, 'landing'],
       [pitch * 1.1, -40, 0, 'returning'],
     ]) {
       await h.scrollTo(position);

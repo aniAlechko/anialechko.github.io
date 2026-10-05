@@ -5,7 +5,7 @@ export async function initBackground(fontsReady, { subscribeLayout } = {}) {
   const TAU = Math.PI * 2;
   const SETTLED_AMPLITUDE = 0.0935;
   const SETTLED_MIX = 0.73;
-  // Matches the reference's .00625-radian step at a steady 60 rendered fps.
+  // Equivalent to a .00625-radian step at a steady 60 rendered fps.
   const PHASE_SPEED = 0.375;
   const TRAIL_COUNT = 8;
   let canvas = originalCanvas;

@@ -10,7 +10,7 @@ const blendBox = (first, last, xProgress, yProgress = xProgress) => box(
   mix(first.width, last.width, xProgress), mix(first.height, last.height, yProgress),
 );
 const defaultMetrics = {
-  nameWidths: [2.662, 3.398], introWidths: [9.72, 9.19], statusWidths: [9.92, 13.86],
+  nameWidths: [2.662, 3.398], introWidths: [9.414, 8.294], statusWidths: [9.363, 10.956],
 };
 const getMode = (width, height) => ({
   progress: width <= 500 || (width <= 809 && width / height <= 1.2) ? 1 : 0,
@@ -36,8 +36,9 @@ export function getHeroLayout({ width, height, metrics = defaultMetrics,
   const compositionGap = clamp(height * .03, 16, 24);
   const footerGap = clamp(height * .03, 16, 28);
   const breathingRoom = clamp((height - 500) * .07, 0, 24);
+  const copyRows = metrics.introWidths.length + metrics.statusWidths.length;
   const portraitCharacter = clamp(height - 84 - 1.72 * portraitName - compositionGap
-    - portraitSpeech / 3.2 - 8 - footerGap - 4.48 * portraitDetails - 8 - breathingRoom, 104, 250);
+    - portraitSpeech / 3.2 - 8 - footerGap - copyRows * 1.12 * portraitDetails - 8 - breathingRoom, 104, 250);
   const characterHeight = mix(wideCharacter, portraitCharacter, progress);
   const characterWidth = characterHeight * 444 / 1180;
   const speechWidth = mix(mix(clamp(width * .22, 230, 320), 212, smallDetails), portraitSpeech, progress);
@@ -53,7 +54,8 @@ export function getHeroLayout({ width, height, metrics = defaultMetrics,
   const nameHeight = nameSize * .86;
   const speechHeight = speechWidth / 3.2;
   const copyLineHeight = detailSize * detailLineHeight;
-  const copyHeight = 2 * copyLineHeight;
+  const introHeight = metrics.introWidths.length * copyLineHeight;
+  const statusHeight = metrics.statusWidths.length * copyLineHeight;
   const introWidth = Math.max(...metrics.introWidths) * detailSize;
   const statusWidth = Math.max(...metrics.statusWidths) * detailSize;
   const copyWidth = Math.max(introWidth, statusWidth);
@@ -61,7 +63,7 @@ export function getHeroLayout({ width, height, metrics = defaultMetrics,
   const widePaddingBottom = mix(mix(100, 70, compact), 64, short);
   const compositionHeight = Math.max(characterHeight, nameHeight);
   const portraitContentHeight = 2 * nameHeight + compositionGap + speechHeight + 8
-    + characterHeight + footerGap + 2 * copyHeight + 8;
+    + characterHeight + footerGap + introHeight + statusHeight + 8;
   let heroHeight = mix(Math.max(height, widePaddingTop + compositionHeight + widePaddingBottom),
     Math.max(height, 84 + portraitContentHeight), progress);
   const wideCenterY = widePaddingTop + (heroHeight - widePaddingTop - widePaddingBottom) / 2;
@@ -85,12 +87,12 @@ export function getHeroLayout({ width, height, metrics = defaultMetrics,
     wideCenterY - characterHeight / 2 - speechHeight - 12, speechWidth, speechHeight),
   box((width - speechWidth) / 2, portraitSpeechTop, speechWidth, speechHeight), progress, characterY);
   const copyBottom = mix(24, 16, smallDetails);
-  const wideCopyTop = heroHeight - copyBottom - copyHeight;
-  const intro = blendBox(box(mix(24, 16, smallDetails), wideCopyTop, introWidth, copyHeight),
-    box((width - copyWidth) / 2, portraitCopyTop, copyWidth, copyHeight), nameX, nameY);
+  const intro = blendBox(box(mix(24, 16, smallDetails), heroHeight - copyBottom - introHeight,
+    introWidth, introHeight),
+    box((width - copyWidth) / 2, portraitCopyTop, copyWidth, introHeight), nameX, nameY);
   const status = blendBox(box(width - mix(clamp(width * .0555, 24, 100), 16, smallDetails)
-    - statusWidth, wideCopyTop, statusWidth, copyHeight),
-  box((width - copyWidth) / 2, portraitCopyTop + copyHeight + 8, copyWidth, copyHeight), nameX, nameY);
+    - statusWidth, heroHeight - copyBottom - statusHeight, statusWidth, statusHeight),
+  box((width - copyWidth) / 2, portraitCopyTop + introHeight + 8, copyWidth, statusHeight), nameX, nameY);
   const content = [...names, character, speech, intro, status];
   const headerClearance = Math.max(0, 64 - Math.min(...content.map(bounds => bounds.top)));
   for (const bounds of content) bounds.top += headerClearance;

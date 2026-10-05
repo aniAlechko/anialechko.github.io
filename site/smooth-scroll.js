@@ -22,7 +22,14 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
 
   function restingTarget(value, sign = 0) {
     const bounded = clamp(value, maxScroll());
-    if (!route || bounded > route.total) return bounded;
+    if (!route) return bounded;
+    if (bounded > route.total) {
+      // Finish the descent before a later wheel input continues into contact.
+      // A settled fractional endpoint may read back as the adjacent whole pixel.
+      const approachingArrival = (frame && target <= route.total) || route.total - position >= .5;
+      return sign > 0 && position < route.total && approachingArrival
+        ? Math.min(route.total, maxScroll()) : bounded;
+    }
     let destination = Math.round(bounded / route.pitch) * route.pitch;
     // A small line-mode wheel delta must still move in its requested direction.
     if (sign > 0 && destination <= position + 0.4) {

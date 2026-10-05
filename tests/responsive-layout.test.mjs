@@ -5,7 +5,8 @@ import { getHeroLayout } from '../site/responsive-layout.js';
 
 const source = await readFile(new URL('../site/responsive-layout.js', import.meta.url), 'utf8');
 const flush = () => new Promise(resolve => setImmediate(resolve));
-const metrics = { nameWidths: [2.662, 3.398], introWidths: [9.72, 9.19], statusWidths: [9.92, 13.86] };
+const metrics = { nameWidths: [2.662, 3.398],
+  introWidths: [9.4140625, 8.294140625], statusWidths: [9.36328125, 10.95625] };
 const near = (actual, expected, label, tolerance = .001) => assert.ok(Math.abs(actual - expected) < tolerance,
   `${label}: expected ${expected}, received ${actual}`);
 const center = bounds => bounds.left + bounds.width / 2;
@@ -167,6 +168,45 @@ const tests = [
     near(mobile.names[0].top + mobile.names[0].height, mobile.names[1].top, 'Stacked name lines');
     near(mobile.character.top - mobile.speech.top - mobile.speech.height, 8, 'Bubble gap');
     near(mobile.status.top - mobile.intro.top - mobile.intro.height, 8, 'Equal copy group gap');
+  }],
+  ['single-row footer text reaches the original bottom edge on desktop and short landscape', async () => {
+    const singleRow = { nameWidths: metrics.nameWidths, introWidths: [9.72], statusWidths: [9.92] };
+    for (const viewport of [{ width: 1364, height: 1244, bottomGap: 24 },
+      { width: 844, height: 390, bottomGap: 20 }, { width: 640, height: 360, bottomGap: 20 }]) {
+      const assertFooter = layout => {
+        near(layout.progress, 0, 'Footer regression uses the side-by-side composition');
+        const lineHeight = layout.detailSize * layout.detailLineHeight;
+        for (const name of ['intro', 'status']) {
+          const renderedBottom = layout[name].top + lineHeight;
+          near(layout.height - renderedBottom, viewport.bottomGap,
+            `${name} text bottom at ${viewport.width}×${viewport.height}`);
+          near(layout[name].height, lineHeight, `${name} has no empty second-line reservation`);
+        }
+      };
+      assertFooter(getHeroLayout({ ...viewport, metrics: singleRow }));
+      const h = makeHarness({ ...viewport, measuredMetrics: singleRow });
+      let latest; h.controller.subscribe(layout => { h.assertCommitted(layout); latest = layout; });
+      await flush(); assertFooter(latest); h.controller.cleanup();
+    }
+  }],
+  ['unequal footer row counts keep their rendered last lines bottom aligned', () => {
+    for (const [introWidths, statusWidths] of [[[9.72], [9.92, 13.86]], [[9.72, 9.19], [9.92]]]) {
+      const measuredMetrics = { nameWidths: metrics.nameWidths, introWidths, statusWidths };
+      for (const viewport of [{ width: 1364, height: 1244, bottomGap: 24 },
+        { width: 844, height: 390, bottomGap: 20 }]) {
+        const layout = getHeroLayout({ ...viewport, metrics: measuredMetrics });
+        const lineHeight = layout.detailSize * layout.detailLineHeight;
+        const introBottom = layout.intro.top + introWidths.length * lineHeight;
+        const statusBottom = layout.status.top + statusWidths.length * lineHeight;
+        near(introBottom, statusBottom, 'Last rendered footer lines share a baseline');
+        near(layout.height - introBottom, viewport.bottomGap, 'The shorter footer block stays at the bottom');
+        near(layout.intro.height, introWidths.length * lineHeight, 'Intro height fits its real rows');
+        near(layout.status.height, statusWidths.length * lineHeight, 'Status height fits its real rows');
+      }
+      const portrait = getHeroLayout({ width: 390, height: 650, metrics: measuredMetrics });
+      const introBottom = portrait.intro.top + introWidths.length * portrait.detailSize * portrait.detailLineHeight;
+      near(portrait.status.top - introBottom, 8, 'Portrait stacks real copy groups with an 8 px gap');
+    }
   }],
   ['every settled viewport selects a complete desktop or portrait composition', () => {
     for (const height of [305, 390, 568, 650, 844, 1000, 1244]) for (let width = 320; width <= 1500; width += 4) {
@@ -440,6 +480,12 @@ const tests = [
     const h = makeHarness({ pending: true }); let latest;
     h.controller.subscribe(layout => { latest = layout; }); h.gate.reject(new Error('Font failed')); await flush();
     h.assertCommitted(latest);
+    const lineHeight = latest.detailSize * latest.detailLineHeight;
+    for (const name of ['intro', 'status']) {
+      near(latest[name].height, lineHeight * 2, `${name} fallback reserves both real rows`);
+      assert.equal(latest[`${name}RowOffsets`].length, 2, `${name} fallback omitted the second row offset`);
+      assert.ok(latest[`${name}RowOffsets`].every(Number.isFinite), `${name} fallback produced an invalid row offset`);
+    }
     const absent = makeHarness({ missingHero: true });
     const unsubscribe = absent.controller.subscribe(() => assert.fail('Missing hero emitted a layout'));
     unsubscribe(); absent.controller.cleanup(); absent.resize(390);

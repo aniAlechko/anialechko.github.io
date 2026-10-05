@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const source = await readFile(new URL('../site/smooth-scroll.js', import.meta.url), 'utf8');
 const route = { pitch: 40, total: 1000 };
 
-function makeHarness(initialScroll) {
+function makeHarness(initialScroll, { roundScroll = false } = {}) {
   let now = 0;
   let frameId = 0;
   const frames = new Map();
@@ -21,7 +21,7 @@ function makeHarness(initialScroll) {
   const window = {
     scrollY: initialScroll,
     innerHeight: 800,
-    scrollTo({ top }) { scrollWrites++; this.scrollY = top; },
+    scrollTo({ top }) { scrollWrites++; this.scrollY = roundScroll ? Math.round(top) : top; },
     addEventListener(type, listener) { events.set(type, listener); },
     removeEventListener(type) { events.delete(type); },
   };
@@ -94,17 +94,46 @@ const tests = [
     h.finish();
     assert.equal(h.window.scrollY, 960);
   }],
-  ['a wheel target can pass the final arrival directly into contact', () => {
+  ['a crossing wheel input settles at arrival before the next input continues into contact', () => {
     const h = makeHarness(980);
     const first = h.wheel(120).target;
-    assert.ok(first > route.total, 'Contact scrolling was stopped at the final ladder rung');
+    assert.equal(first, route.total, 'The crossing gesture raised the landed character above its stop');
     assert.equal(h.window.scrollY, 980);
     h.advance(4);
-    assert.ok(h.window.scrollY > route.total && h.window.scrollY < first,
-      'The page did not ease through the contact boundary');
-    assert.ok(h.wheel(120).target > first);
+    assert.ok(h.window.scrollY > 980 && h.window.scrollY < first, 'The page did not ease toward arrival');
+    assert.equal(h.wheel(120).target, route.total, 'An unfinished arrival was pushed into contact');
+    h.finish();
+    assert.equal(h.window.scrollY, route.total);
+    assert.ok(h.wheel(120).target > route.total, 'Arrival trapped later scrolling into contact');
     h.finish();
     assert.ok(h.window.scrollY > route.total);
+  }],
+  ['near-endpoint wheel input holds arrival and still responds immediately to reversal', () => {
+    const h = makeHarness(route.total - .5);
+    assert.equal(h.wheel(120).target, route.total, 'The last fraction of a pixel bypassed arrival');
+    h.advance();
+    assert.ok(route.total - h.window.scrollY < .5 && h.controller.getTarget() !== null);
+    assert.equal(h.wheel(120).target, route.total, 'Repeated input pushed the pending arrival into contact');
+    assert.ok(h.wheel(-40).target < route.total, 'The arrival stop trapped a reverse gesture');
+    h.finish();
+    assert.ok(h.window.scrollY < route.total);
+  }],
+  ['a rounded fractional arrival continues into the garden without native jumps or repeated endpoint stops', () => {
+    for (const remainder of [.25, .45, .5, .75]) {
+      const fractionalRoute = { pitch: 40, total: 800 + remainder };
+      const h = makeHarness(780, { roundScroll: true });
+      h.controller.setRoute(fractionalRoute);
+      assert.equal(h.wheel(120).target, fractionalRoute.total);
+      h.finish();
+      assert.equal(h.window.scrollY, Math.round(fractionalRoute.total));
+      const next = h.wheel(120);
+      assert.equal(next.prevented, true, 'The next wheel gesture fell through to an abrupt native scroll');
+      assert.ok(next.target > fractionalRoute.total, 'The rounded position was trapped at arrival');
+      h.advance();
+      assert.ok(h.wheel(120).target > fractionalRoute.total, 'Continuing input returned to the completed arrival');
+      h.finish();
+      assert.ok(h.window.scrollY > fractionalRoute.total);
+    }
   }],
   ['a strong burst settles within 640ms after the last wheel input', () => {
     const h = makeHarness(40);

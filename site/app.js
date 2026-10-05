@@ -1,6 +1,10 @@
 import { initDescent } from './avatar-ladder.js';
 import { initSmoothScroll } from './smooth-scroll.js';
 import { initResponsiveLayout } from './responsive-layout.js';
+import { initClouds } from './clouds.js';
+import { initGarden } from './garden.js';
+import { initFishing } from './fishing.js';
+import { initFooterFish } from './footer-fish.js';
 
 const page = document.documentElement;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -18,50 +22,6 @@ const fontsReady = Promise.allSettled([
   document.fonts.load('700 20px "Neue Montreal"'),
 ]);
 const responsiveLayout = initResponsiveLayout({ layoutReady: fontsReady });
-
-const contactSection = document.querySelector('.landing');
-const contactTitle = document.querySelector('#contact-title');
-let refreshContact = () => {};
-
-if (contactSection && contactTitle) {
-  let revealStart = 0;
-  let revealEnd = 1;
-  let distance = 0;
-  let frame = 0;
-  let needsMeasure = true;
-  let previousShift;
-
-  const renderContact = () => {
-    frame = 0;
-    if (needsMeasure) {
-      needsMeasure = false;
-      const titleTop = contactTitle.getBoundingClientRect().top + window.scrollY;
-      revealEnd = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      revealStart = Math.max(0, Math.min(revealEnd - 1, titleTop - window.innerHeight));
-      distance = Math.min(160, window.innerWidth * .08);
-    }
-    const progress = Math.min(1, Math.max(0, (window.scrollY - revealStart) / (revealEnd - revealStart)));
-    const shift = reducedMotion.matches ? '0px' : `${((1 - progress) * distance).toFixed(2)}px`;
-    if (shift === previousShift) return;
-    previousShift = shift;
-    contactTitle.style.setProperty('--contact-shift', shift);
-  };
-  const scheduleContact = () => {
-    if (!frame) frame = requestAnimationFrame(renderContact);
-  };
-  refreshContact = () => {
-    needsMeasure = true;
-    scheduleContact();
-  };
-  const contactObserver = new ResizeObserver(refreshContact);
-  contactObserver.observe(contactSection);
-  contactObserver.observe(contactTitle);
-  window.addEventListener('scroll', scheduleContact, { passive: true });
-  window.addEventListener('resize', refreshContact, { passive: true });
-  reducedMotion.addEventListener('change', scheduleContact);
-  fontsReady.then(refreshContact);
-  refreshContact();
-}
 
 const character = document.querySelector('.character');
 const idleImage = document.querySelector('.character-pose--idle .character-image');
@@ -108,10 +68,33 @@ function removeIntroListeners() {
 window.addEventListener('scroll', skipOnScroll, { passive: true });
 skipOnScroll();
 let smoothScroll;
+let garden;
 try {
   smoothScroll = initSmoothScroll({ onInteraction: skipIntro });
 } catch (error) {
   console.warn('Scroll easing unavailable; native scrolling remains usable.', error);
+}
+let clouds;
+let fishing;
+try {
+  garden = initGarden();
+} catch (error) {
+  console.warn('Garden unavailable; the portfolio remains usable.', error);
+}
+try {
+  fishing = initFishing({ getHoldDistance: () => garden?.getHoldDistance?.() ?? 0 });
+} catch (error) {
+  console.warn('Fishing unavailable; the character remains visible.', error);
+}
+try {
+  initFooterFish();
+} catch (error) {
+  console.warn('Footer animation unavailable; contact links remain usable.', error);
+}
+try {
+  clouds = initClouds({ getHoldDistance: () => garden?.getHoldDistance?.() ?? 0 });
+} catch (error) {
+  console.warn('Clouds unavailable; character descent remains usable.', error);
 }
 try {
   initDescent({
@@ -119,8 +102,10 @@ try {
     onInteraction: skipIntro,
     layoutReady: fontsReady,
     onLayout: route => {
+      garden?.setRoute(route);
+      fishing?.setRoute(route);
+      clouds?.setRoute(route);
       smoothScroll?.setRoute(route);
-      refreshContact();
     },
     getScrollTarget: () => smoothScroll?.getTarget() ?? null,
   });

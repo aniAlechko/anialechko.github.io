@@ -65,7 +65,7 @@
     <p class="visually-hidden" id="portfolio-note">Portfolio under construction. I'm putting together a new portfolio. You can contact me by email or LinkedIn.</p>
     <footer class="hero-details">
       <p class="hero-intro"><span class="intro-row">PRODUCT DESIGNER</span><span class="intro-row">BASED IN TEL AVIV</span></p>
-      <p class="status"><span class="status-row">UX/UI WEB &amp; MOBILE</span><span class="status-row">INTERACTION, MOTION, VISUAL</span></p>
+      <p class="status"><span class="status-row">UX/UI WEB &amp; MOBILE</span><span class="status-row">INTERACTION &amp; MOTION</span></p>
     </footer>
     <div class="scroll-indicator" role="img" aria-label="Scroll down">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
@@ -74,6 +74,40 @@
     </div>
   </section>
   <section id="descent-stage" aria-hidden="true"></section>
+  <div id="statement-stage" aria-hidden="true"></div>
+  <div class="scene-track">
+  <div class="scene-frame">
+  <div class="garden-daylight" aria-hidden="true" hidden></div>
+  <section class="garden-scene" aria-label="Design approach" hidden>
+    <p class="garden-statement">
+      <span class="statement-line"><span class="statement-line-text"><span class="statement-phrase">I design digital</span> <span class="statement-phrase">experiences</span></span></span>
+      <span class="statement-line"><span class="statement-line-text"><span class="statement-phrase">that make the</span> <span class="statement-phrase">next step clear,</span></span></span>
+      <span class="statement-line"><span class="statement-line-text"><span class="statement-phrase">keep everyday</span> <span class="statement-phrase">tasks simple,</span></span></span>
+      <span class="statement-line"><span class="statement-line-text"><span class="statement-phrase">and leave a little</span> <span class="statement-phrase">room to play.</span></span></span>
+    </p>
+    <div class="garden-art" aria-hidden="true">
+    <div class="garden-rabbit garden-rabbit--left"><img src="/images/garden-rabbit.png" width="1254" height="1254" alt="" draggable="false" decoding="async" /></div>
+    <div class="garden-rabbit garden-rabbit--right"><img src="/images/garden-rabbit.png" width="1254" height="1254" alt="" draggable="false" decoding="async" /></div>
+    <div class="garden-resting-character"><img class="character-image" src="/images/alex-rivkin-idle.png" width="1024" height="1536" alt="" draggable="false" /></div>
+    <div class="garden-meadow">
+      <i class="garden-flower" style="--x:9%;--y:12%;--bloom:#a62b38"></i>
+      <i class="garden-flower" style="--x:24%;--y:4%;--bloom:#d6a232"></i>
+      <i class="garden-flower" style="--x:35%;--y:19%;--bloom:#a62b38"></i>
+      <i class="garden-flower" style="--x:59%;--y:8%;--bloom:#d6a232"></i>
+      <i class="garden-flower" style="--x:75%;--y:17%;--bloom:#a62b38"></i>
+      <i class="garden-flower" style="--x:91%;--y:5%;--bloom:#d6a232"></i>
+      <i class="garden-grass" style="--x:5%;--y:3%"></i>
+      <i class="garden-grass" style="--x:17%;--y:18%"></i>
+      <i class="garden-grass" style="--x:30%;--y:10%"></i>
+      <i class="garden-grass" style="--x:38%;--y:2%"></i>
+      <i class="garden-grass" style="--x:56%;--y:18%"></i>
+      <i class="garden-grass" style="--x:66%;--y:3%"></i>
+      <i class="garden-grass" style="--x:82%;--y:8%"></i>
+      <i class="garden-grass" style="--x:96%;--y:20%"></i>
+    </div>
+    </div>
+  </section>
+  <div class="cloud-scene" aria-hidden="true" hidden></div>
   <div id="descent-scene" class="descent-scene" aria-hidden="true" hidden>
     <div class="descent-ladder"><div class="descent-ladder-strip"></div></div>
     <div class="descent-actor">
@@ -82,19 +116,37 @@
         <img class="descent-image" data-pose="a" src="/images/alex-rivkin-climb-back-a.png" width="1024" height="1536" alt="" fetchpriority="low" draggable="false" hidden />
         <img class="descent-image" data-pose="b" src="/images/alex-rivkin-climb-back-b.png" width="1024" height="1536" alt="" fetchpriority="low" draggable="false" hidden />
       </div>
+      <div class="fishing-actor" data-pose="reach" hidden>
+        <div class="fishing-pose fishing-pose--reach"><img class="fishing-sprite-source" src="/images/alex-rivkin-fishing.png" width="1254" height="1254" alt="" draggable="false" decoding="async" /></div>
+        <div class="fishing-pose fishing-pose--ready"></div>
+        <div class="fishing-pose fishing-pose--cast"></div>
+        <div class="fishing-pose fishing-pose--idle"></div>
+      </div>
+      <div class="fishing-line-upper"></div>
     </div>
     <img class="descent-ladder-probe" src="/images/pixel-construction-ladder.png" width="1024" height="1536" alt="" fetchpriority="low" hidden />
   </div>
   </div>
+  </div>
+  </div>
   <section id="landing" class="landing" aria-labelledby="contact-title">
+    <canvas id="footer-fish" aria-hidden="true"></canvas>
     <div class="contact-copy">
       <h2 id="contact-title"><span>LET'S BUILD</span><span>TOGETHER</span></h2>
+      <div class="contact-actions">
+      <a class="contact-link contact-link--work" href="/case-studies.html">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
+          <path d="M3 3h7v2h11v16H3V3zm2 4v12h14V7H5zm2 3h10v2H7v-2zm0 4h7v2H7v-2z" />
+        </svg>
+        <span>SEE CASE STUDIES</span>
+      </a>
       <a class="contact-link" href="mailto:anialechko@gmail.com" aria-label="Say hi to Alex Rivkin by email">
         <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
           <path d="M2 4h20v16H2V4zm2 2v12h16V6h-2v2h-2v2h-2v2h-4v-2H8V8H6V6H4zm4 0v2h2v2h4V8h2V6H8z" />
         </svg>
         <span>SAY HI</span>
       </a>
+      </div>
     </div>
   </section>
   </main>

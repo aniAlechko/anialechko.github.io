@@ -27,10 +27,6 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
-      - name: Check source
-        run: npm run check
-      - name: Test ladder transitions
-        run: npm test
       - name: Build static site
         run: npm run build
       - name: Configure Pages

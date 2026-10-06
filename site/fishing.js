@@ -47,7 +47,7 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
     const scroll = window.scrollY;
     if (!ready || failed || !route || scene.dataset.state !== 'landed'
       || !Number.isFinite(hold) || hold <= 0 || !Number.isFinite(scroll)
-      || scroll < route.total + hold * .18) {
+      || scroll < route.total + hold * .20) {
       reset();
       return;
     }
@@ -56,7 +56,7 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
       fishing.hidden = false;
       actor.classList.add('is-fishing');
     }
-    const pose = scroll < route.total + hold * .38 ? 'reach'
+    const pose = scroll < route.total + hold * .40 ? 'reach'
       : scroll < route.total + hold * .60 ? 'ready'
       : scroll < route.total + hold * .80 ? 'cast' : 'idle';
     if (pose !== lastPose) {

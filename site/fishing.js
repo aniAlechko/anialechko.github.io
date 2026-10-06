@@ -21,6 +21,10 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
   const transitionDuration = 220;
   const lineDuration = 520;
   const poses = ['standing', 'reach', 'ready', 'cast', 'idle'];
+  const rodTips = {
+    idle: { x: 975.25, y: 113.25 },
+    pull: { x: 1304.76, y: -15.8 },
+  };
   let stage = 0;
   let transition = null;
   let lineAnimation = null;
@@ -57,14 +61,15 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
       fishing.dataset.pose = spritePose;
       lastPose = spritePose;
       pullPreparedAt = spritePose === 'pull' ? performance.now() : null;
-      actor.style.setProperty('--fishing-tip-x', spritePose === 'pull' ? '1198.65' : '975.25');
-      actor.style.setProperty('--fishing-tip-y', spritePose === 'pull' ? '-12.6' : '113.25');
+      const tip = rodTips[spritePose] || rodTips.idle;
+      actor.style.setProperty('--fishing-tip-x', String(tip.x));
+      actor.style.setProperty('--fishing-tip-y', String(tip.y));
     }
   }
 
   function positionRig(scroll, range) {
     if (!range || !route || !spriteUnit) return;
-    const tipY = lastPose === 'pull' ? -12.6 : 113.25;
+    const tipY = (rodTips[lastPose] || rodTips.idle).y;
     // Both sections and the actor stay in the same document flow. Connect the
     // tip to their shared edge, not an arbitrary long string.
     const actorTop = route.landingTop - Math.max(0, scroll - range.start);

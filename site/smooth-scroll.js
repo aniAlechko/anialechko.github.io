@@ -21,6 +21,7 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
   let resizeFrame = 0;
   let resizePending = false;
   let heldPull = null;
+  let pullRelease = null;
   let lastAcceptedScroll = window.scrollY;
   let touchY = null;
 
@@ -42,17 +43,27 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
 
   function holdAtStart(motion, destination) {
     const top = Math.floor(clamp(motion.start, maxScroll()));
-    heldPull = { start: motion.start, end: motion.end, top };
-    page.classList.add('is-fishing-scroll-held');
-    target = clamp(Math.min(motion.start + window.innerHeight * .4,
+    const continuing = heldPull?.start === motion.start && heldPull?.end === motion.end;
+    if (!continuing) {
+      heldPull = { start: motion.start, end: motion.end, top };
+      pullRelease = null;
+      page.classList.add('is-fishing-scroll-held');
+      position = Math.min(window.scrollY, top);
+    }
+    // Additional input updates bounded intent, without restarting the approach
+    // or replacing its fractional position with the browser's rounded scrollY.
+    target = clamp(Math.min(motion.start + window.innerHeight * .12,
       Math.max(target, destination, motion.start)), maxScroll());
-    position = Math.min(window.scrollY, top);
-    if (window.scrollY > top) window.scrollTo({ top, behavior: 'instant' });
+    if (window.scrollY > top) {
+      position = top;
+      window.scrollTo({ top, behavior: 'instant' });
+    }
     ownScroll = lastAcceptedScroll = window.scrollY;
     direction = 1;
-    previousTime = performance.now();
-    cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(animate);
+    if (!frame) {
+      previousTime = performance.now();
+      frame = requestAnimationFrame(animate);
+    }
   }
 
   function holdForward(destination, event, motion = pullMotion()) {
@@ -64,7 +75,7 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
     return true;
   }
 
-  function pullStep(next, elapsed, motion) {
+  function pullStep(next, elapsed, motion, destination) {
     if (!crossesPull(motion, position, next)) return next;
     // Retain the wheel destination while the cast and line finish, so no new
     // gesture is needed to start pulling. Reversing never enters this branch.
@@ -88,7 +99,7 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
       return offset - ramp * .5;
     }
     const arrivalTime = position < motion.start
-      ? -responseTime * Math.log((target - motion.start) / (target - position)) : 0;
+      ? -responseTime * Math.log((destination - motion.start) / (destination - position)) : 0;
     const budget = distance(position)
       + window.innerHeight * .6 * Math.max(0, elapsed - arrivalTime) / 1000;
     if (distance(next) <= budget) return next;
@@ -119,6 +130,7 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
 
   function stop() {
     releaseHold();
+    pullRelease = null;
     cancelAnimationFrame(frame);
     cancelAnimationFrame(resizeFrame);
     frame = 0;
@@ -132,6 +144,7 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
   }
 
   function animate(time) {
+    frame = 0;
     // Keep fractional progress; reading rounded scrollY each frame would stall
     // the last few pixels of the ease-out.
     const elapsed = Math.min(50, Math.max(0, time - previousTime));
@@ -143,8 +156,9 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
     const pull = pullMotion();
     if (heldPull) {
       if (!pull || pull.ready || pull.start !== heldPull.start || pull.end !== heldPull.end) {
+        pullRelease = pull?.ready && pull.start === heldPull.start && pull.end === heldPull.end
+          ? { from: heldPull.top, start: time } : null;
         releaseHold();
-        position = ownScroll = lastAcceptedScroll = window.scrollY;
       } else {
         position += (heldPull.top - position) * (1 - Math.exp(-elapsed / responseTime));
         if (Math.abs(heldPull.top - position) < .4) position = heldPull.top;
@@ -155,14 +169,23 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
       }
     }
     if (pull && position >= pull.start && position < pull.end && target > position) {
-      target = Math.min(target, position + window.innerHeight * .4);
+      target = Math.min(target, position + window.innerHeight * .18);
     }
-    const next = position + (target - position) * (1 - Math.exp(-elapsed / responseTime));
+    let destination = target;
+    if (pullRelease) {
+      // Reveal the saved destination gradually. At release the effective target
+      // is still the holding point, so approaching motion and rest both join it.
+      const progress = clamp((time - pullRelease.start) / 180, 1);
+      const eased = progress * progress * (3 - 2 * progress);
+      destination = pullRelease.from + (target - pullRelease.from) * eased;
+      if (progress === 1) pullRelease = null;
+    }
+    const next = position + (destination - position) * (1 - Math.exp(-elapsed / responseTime));
     if (pull && !pull.ready && crossesPull(pull, position, next)) {
       holdAtStart(pull, target);
       return;
     }
-    position = pullStep(next, elapsed, pull);
+    position = pullStep(next, elapsed, pull, destination);
     const held = pull && !pull.ready && crossesPull(pull, position, target);
     const finished = !held && Math.abs(target - position) < 0.4;
     if (finished) position = target;
@@ -236,6 +259,7 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
     responseTime = reversing ? 120 : 180 + 35 * strength;
     lastWheelTime = now;
     if (!frame || reversing) {
+      if (reversing) pullRelease = null;
       position = target = ownScroll = window.scrollY;
     }
     // Strong bursts build speed and leave a few rungs of momentum, without
@@ -243,10 +267,9 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
     const onLadder = route && ((position >= 0 && position <= route.total)
       || (target >= 0 && target <= route.total));
     let lead = onLadder ? route.pitch * (4 + 4 * strength) : window.innerHeight * 0.55;
-    let requested = target + delta * (1 + 0.9 * strength);
+    const requested = target + delta * (1 + 0.9 * strength);
     if (crossesPull(pull, position, requested)) {
-      lead = Math.min(lead, Math.max(0, pull.start - position) + window.innerHeight * .4);
-      requested = target + delta;
+      lead = Math.min(lead, Math.max(0, pull.start - position) + window.innerHeight * .18);
     }
     const destination = restingTarget(Math.max(position - lead, Math.min(position + lead, requested)), sign);
     if (!frame && Math.abs(destination - position) < 0.4) return;
@@ -278,6 +301,7 @@ export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () 
 
   function resized() {
     if (heldPull) stop();
+    pullRelease = null;
     lastAcceptedScroll = window.scrollY;
     position = ownScroll = window.scrollY;
     if (!frame) {

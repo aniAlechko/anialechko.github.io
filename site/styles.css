@@ -639,7 +639,9 @@ a:hover { color: #efee74; }
 .fishing-pose--idle { --art-scale: 2.25; --crop-x: 757; --crop-y: 680; --crop-width: 473; --crop-height: 532; --anchor: 135; }
 .fishing-pose--pull {
   --art-scale: 1.31; --crop-x: 66; --crop-y: 140;
-  --crop-width: 1124; --crop-height: 1066; --anchor: 384;
+  /* Keep the rear foot planted at the idle pose's position. */
+  --crop-width: 1124; --crop-height: 1066; --anchor: 303;
+  bottom: calc(7.2 * var(--sprite-unit));
   background-image: url('/images/alex-rivkin-fishing-pull.png');
   background-size: calc(1225 * var(--fishing-unit)) calc(1284 * var(--fishing-unit));
 }

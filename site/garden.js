@@ -1,3 +1,5 @@
+import { initGardenRabbits } from './garden-rabbits.js';
+
 export function initGarden() {
   const garden = document.querySelector('.garden-scene');
   const daylight = document.querySelector('.garden-daylight');
@@ -6,6 +8,7 @@ export function initGarden() {
   if (!garden || !daylight || !journey || !hero) return { setRoute() {}, cleanup() {} };
   const statementStage = document.querySelector('#statement-stage');
   const statement = garden.querySelector('.garden-statement');
+  const rabbits = initGardenRabbits(garden);
 
   let route;
   let ready = false;
@@ -15,7 +18,6 @@ export function initGarden() {
   let gardenHeight = 0;
   let holdDistance = 0;
   let lastTop;
-  let lastPlaying;
 
   function render() {
     frame = 0;
@@ -23,11 +25,8 @@ export function initGarden() {
     const scroll = Math.max(0, window.scrollY);
     const hold = route ? Math.max(0, Math.min(holdDistance, scroll - route.total)) : 0;
     const playing = !document.hidden && scroll + window.innerHeight > gardenTop + hold
-      && scroll < gardenTop + hold + gardenHeight ? 'running' : 'paused';
-    if (playing !== lastPlaying) {
-      garden.style.setProperty('--garden-play-state', playing);
-      lastPlaying = playing;
-    }
+      && scroll < gardenTop + hold + gardenHeight;
+    rabbits.setPlaying(playing);
   }
 
   function schedule() {
@@ -100,6 +99,7 @@ export function initGarden() {
       if (disposed) return;
       disposed = true;
       cancelAnimationFrame(frame);
+      rabbits.cleanup();
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', resized);
       document.removeEventListener('visibilitychange', schedule);

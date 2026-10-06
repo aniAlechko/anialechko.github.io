@@ -390,7 +390,6 @@ a:hover { color: #efee74; }
 .garden-daylight[hidden], .garden-scene[hidden] { display: none; }
 .garden-scene {
   overflow-anchor: none;
-  --garden-play-state: paused;
   position: absolute;
   z-index: 2;
   inset: auto 0;
@@ -412,7 +411,7 @@ a:hover { color: #efee74; }
 .garden-art { position: absolute; z-index: 2; inset: 0; }
 .garden-statement {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   top: calc(44% + clamp(0px, (100vw - 600px) * .0533, 16px) - clamp(0px, (700px - 100svh) * .1, 30px));
   left: 50%;
   width: min(calc(100% - 2 * clamp(20px, 8px + 2vw, 32px)), 25em);
@@ -428,23 +427,18 @@ a:hover { color: #efee74; }
 }
 .garden-rabbit {
   position: absolute;
-  overflow: hidden;
-  height: var(--rabbit-height);
-  width: calc(var(--rabbit-height) * 637 / 779);
-  animation: garden-rabbit-hop 8s steps(1, end) infinite;
-  animation-play-state: var(--garden-play-state);
+  width: clamp(64px, 6vw, 80px);
+  aspect-ratio: 1;
+  z-index: 1;
 }
-.garden-rabbit img {
+.garden-rabbit-sprite {
   position: absolute;
-  width: 196.86%;
-  max-width: none;
-  left: -49.608%;
-  top: -33.376%;
+  inset: 0;
+  background: url('/images/garden-rabbit-sprites.png') 0 0 / 300% 200% no-repeat;
   image-rendering: pixelated;
 }
-.garden-rabbit--left { --rabbit-height: clamp(42px, 7.5svh, 74px); left: 29%; bottom: 7%; }
-.garden-rabbit--right { --rabbit-height: clamp(35px, 6svh, 60px); right: 21%; bottom: 4%; transform: scaleX(-1); }
-.garden-rabbit--right { animation-delay: -4.2s; }
+.garden-rabbit--left { left: 14%; bottom: clamp(44px, 12svh, 120px); }
+.garden-rabbit--right { right: 14%; bottom: clamp(20px, 6svh, 64px); }
 .garden-meadow { position: absolute; inset: 0 0 16px; }
 .garden-flower, .garden-grass { position: absolute; left: var(--x); bottom: var(--y); }
 .garden-flower { --pixel: clamp(2px, .28vw, 4px); width: calc(7 * var(--pixel)); height: calc(13 * var(--pixel)); }
@@ -467,19 +461,14 @@ a:hover { color: #efee74; }
 .garden-resting-character { display: none; position: absolute; bottom: 16px; left: var(--hero-axis); width: var(--character-width); height: var(--character-height); transform: translateX(-50%); overflow: hidden; }
 .has-static-garden .garden-scene { position: relative; inset: auto; transform: none; }
 .has-static-garden .garden-resting-character { display: block; }
-@keyframes garden-rabbit-hop {
-  0%, 72%, 84%, 100% { translate: 0 0; }
-  75%, 81% { translate: 0 -2px; }
-  78% { translate: 0 -5px; }
-}
 @media (max-width: 600px) {
-  .garden-rabbit--left { left: 17%; bottom: 4%; }
-  .garden-rabbit--right { right: 15%; bottom: 10%; }
+  .garden-rabbit { --rabbit-travel: .7; }
+  .garden-rabbit--left { left: 5%; }
+  .garden-rabbit--right { right: 5%; }
   .garden-grass { width: 16px; height: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cloud-scene { display: none; }
-  .garden-rabbit { animation: none; }
 }
 .landing {
   position: relative;

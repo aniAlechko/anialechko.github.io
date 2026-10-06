@@ -1,6 +1,6 @@
 let currentController;
 
-export function initSmoothScroll({ onInteraction = () => {} } = {}) {
+export function initSmoothScroll({ onInteraction = () => {}, getPullMotion = () => null } = {}) {
   if (currentController) return currentController;
   const page = document.documentElement;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -20,6 +20,87 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   let route;
   let resizeFrame = 0;
   let resizePending = false;
+  let heldPull = null;
+  let lastAcceptedScroll = window.scrollY;
+  let touchY = null;
+
+  function pullMotion() {
+    let motion;
+    try { motion = getPullMotion(); } catch { return null; }
+    return motion && Number.isFinite(motion.start) && Number.isFinite(motion.end)
+      && motion.end > motion.start && typeof motion.ready === 'boolean' ? motion : null;
+  }
+
+  function crossesPull(motion, from, to) {
+    return motion && to > from && from < motion.end && to > motion.start;
+  }
+
+  function releaseHold() {
+    heldPull = null;
+    page.classList.remove('is-fishing-scroll-held');
+  }
+
+  function holdAtStart(motion, destination) {
+    const top = Math.floor(clamp(motion.start, maxScroll()));
+    heldPull = { start: motion.start, end: motion.end, top };
+    page.classList.add('is-fishing-scroll-held');
+    target = clamp(Math.min(motion.start + window.innerHeight * .4,
+      Math.max(target, destination, motion.start)), maxScroll());
+    position = Math.min(window.scrollY, top);
+    if (window.scrollY > top) window.scrollTo({ top, behavior: 'instant' });
+    ownScroll = lastAcceptedScroll = window.scrollY;
+    direction = 1;
+    previousTime = performance.now();
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(animate);
+  }
+
+  function holdForward(destination, event, motion = pullMotion()) {
+    if (reducedMotion.matches || !motion || motion.ready
+      || (!heldPull && !crossesPull(motion, window.scrollY, destination))) return false;
+    if (event?.cancelable) event.preventDefault();
+    onInteraction();
+    holdAtStart(motion, destination);
+    return true;
+  }
+
+  function pullStep(next, elapsed, motion) {
+    if (!crossesPull(motion, position, next)) return next;
+    // Retain the wheel destination while the cast and line finish, so no new
+    // gesture is needed to start pulling. Reversing never enters this branch.
+    if (!motion.ready) return Math.min(next, Math.max(position, motion.start));
+
+    const width = motion.end - motion.start;
+    const ramp = Math.min(window.innerHeight * .12, width * .2);
+    // Integrate a smooth resistance profile. Its flat middle caps speed at
+    // .6 viewport/second; both edges meet ordinary scrolling without a velocity
+    // step. Charging the crossed distance prevents a large frame skipping it.
+    function distance(value) {
+      const offset = clamp(value - motion.start, width);
+      if (offset < ramp) {
+        const t = offset / ramp;
+        return ramp * (t ** 3 - .5 * t ** 4);
+      }
+      if (offset > width - ramp) {
+        const t = (width - offset) / ramp;
+        return width - ramp - ramp * (t ** 3 - .5 * t ** 4);
+      }
+      return offset - ramp * .5;
+    }
+    const arrivalTime = position < motion.start
+      ? -responseTime * Math.log((target - motion.start) / (target - position)) : 0;
+    const budget = distance(position)
+      + window.innerHeight * .6 * Math.max(0, elapsed - arrivalTime) / 1000;
+    if (distance(next) <= budget) return next;
+    let low = Math.max(position, motion.start);
+    let high = Math.min(next, motion.end);
+    for (let iteration = 0; iteration < 20; iteration++) {
+      const middle = (low + high) / 2;
+      if (distance(middle) <= budget) low = middle;
+      else high = middle;
+    }
+    return low;
+  }
 
   function restingTarget(value, sign = 0) {
     const bounded = clamp(value, maxScroll());
@@ -37,6 +118,7 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   }
 
   function stop() {
+    releaseHold();
     cancelAnimationFrame(frame);
     cancelAnimationFrame(resizeFrame);
     frame = 0;
@@ -58,11 +140,34 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
       position = ownScroll = window.scrollY;
     }
     target = clamp(target, maxScroll());
-    position += (target - position) * (1 - Math.exp(-elapsed / responseTime));
-    const finished = Math.abs(target - position) < 0.4;
+    const pull = pullMotion();
+    if (heldPull) {
+      if (!pull || pull.ready || pull.start !== heldPull.start || pull.end !== heldPull.end) {
+        releaseHold();
+        position = ownScroll = lastAcceptedScroll = window.scrollY;
+      } else {
+        position += (heldPull.top - position) * (1 - Math.exp(-elapsed / responseTime));
+        if (Math.abs(heldPull.top - position) < .4) position = heldPull.top;
+        window.scrollTo({ top: position, behavior: 'instant' });
+        ownScroll = lastAcceptedScroll = window.scrollY;
+        frame = requestAnimationFrame(animate);
+        return;
+      }
+    }
+    if (pull && position >= pull.start && position < pull.end && target > position) {
+      target = Math.min(target, position + window.innerHeight * .4);
+    }
+    const next = position + (target - position) * (1 - Math.exp(-elapsed / responseTime));
+    if (pull && !pull.ready && crossesPull(pull, position, next)) {
+      holdAtStart(pull, target);
+      return;
+    }
+    position = pullStep(next, elapsed, pull);
+    const held = pull && !pull.ready && crossesPull(pull, position, target);
+    const finished = !held && Math.abs(target - position) < 0.4;
     if (finished) position = target;
     window.scrollTo({ top: position, behavior: 'instant' });
-    ownScroll = window.scrollY;
+    ownScroll = lastAcceptedScroll = window.scrollY;
     if (finished) stop();
     else frame = requestAnimationFrame(animate);
   }
@@ -77,31 +182,49 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   }
 
   function wheel(event) {
+    const vertical = !reducedMotion.matches && !event.defaultPrevented
+      && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.deltaY
+      && Math.abs(event.deltaX) < Math.abs(event.deltaY);
+    if (vertical && !nestedScrollCanMove(event, Math.sign(event.deltaY))) {
+      if (event.deltaY < 0 && heldPull) stop();
+      if (event.deltaY > 0) {
+        const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+        const delta = event.deltaY * scale;
+        if (Number.isFinite(delta)
+          && holdForward(Math.max(window.scrollY, frame ? target : window.scrollY) + delta, event)) return;
+      }
+    }
     if (reducedMotion.matches || !event.cancelable || event.defaultPrevented
       || event.ctrlKey || event.metaKey || event.shiftKey || !event.deltaY
       || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) {
-      stop();
+      if (!heldPull) stop();
       return;
     }
     const now = performance.now();
     const sign = Math.sign(event.deltaY);
+    const multiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+    const delta = event.deltaY * multiplier;
+    const pull = pullMotion();
+    const wheelPosition = frame ? position : window.scrollY;
+    const pullingWheel = sign > 0 && crossesPull(pull, wheelPosition,
+      Math.max(wheelPosition, frame ? target : wheelPosition) + delta);
     // Keep the input mode stable within a gesture. High-resolution mouse wheels
     // can report fractional values or smaller deltas after the first notch.
     const continuous = event.deltaMode === 0
       && now >= mouseWheelUntil
       && (Math.abs(event.deltaY) < 40 || now < nativeWheelUntil);
-    if (continuous || nestedScrollCanMove(event, sign)) {
+    if ((continuous && !pullingWheel) || nestedScrollCanMove(event, sign)) {
       if (continuous) nativeWheelUntil = now + 180;
-      stop();
+      if (!heldPull) stop();
       return;
     }
-    const multiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
-    const delta = event.deltaY * multiplier;
     if (!Number.isFinite(delta)) return;
     const maximum = maxScroll();
     if (!maximum) return;
-    mouseWheelUntil = now + 180;
-    nativeWheelUntil = 0;
+    // A native pixel gesture is borrowed only for the pull. Let it return to
+    // native scrolling immediately outside the band or on upward reversal.
+    mouseWheelUntil = continuous ? 0 : now + 180;
+    nativeWheelUntil = continuous ? now + 180 : 0;
     const interval = now - lastWheelTime;
     const reversing = direction && direction !== sign;
     const continuing = frame && direction === sign && interval < 340;
@@ -119,8 +242,12 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
     // accumulating a long queue after the user releases the wheel.
     const onLadder = route && ((position >= 0 && position <= route.total)
       || (target >= 0 && target <= route.total));
-    const lead = onLadder ? route.pitch * (4 + 4 * strength) : window.innerHeight * 0.55;
-    const requested = target + delta * (1 + 0.9 * strength);
+    let lead = onLadder ? route.pitch * (4 + 4 * strength) : window.innerHeight * 0.55;
+    let requested = target + delta * (1 + 0.9 * strength);
+    if (crossesPull(pull, position, requested)) {
+      lead = Math.min(lead, Math.max(0, pull.start - position) + window.innerHeight * .4);
+      requested = target + delta;
+    }
     const destination = restingTarget(Math.max(position - lead, Math.min(position + lead, requested)), sign);
     if (!frame && Math.abs(destination - position) < 0.4) return;
     event.preventDefault();
@@ -134,12 +261,24 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   }
 
   function scrolled() {
+    const scroll = window.scrollY;
+    const pull = pullMotion();
+    if (!resizePending && !reducedMotion.matches && pull && !pull.ready
+      && scroll > lastAcceptedScroll && lastAcceptedScroll < pull.end && scroll > pull.start) {
+      holdAtStart(pull, scroll);
+      return;
+    }
+    if (heldPull && scroll < lastAcceptedScroll - .5) stop();
+    lastAcceptedScroll = scroll;
+    if (heldPull) return;
     if (!frame || Math.abs(window.scrollY - ownScroll) <= 1.5) return;
     if (resizePending) position = ownScroll = window.scrollY;
     else stop();
   }
 
   function resized() {
+    if (heldPull) stop();
+    lastAcceptedScroll = window.scrollY;
     position = ownScroll = window.scrollY;
     if (!frame) {
       target = position;
@@ -158,15 +297,51 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   }
 
   function keyed(event) {
-    if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) stop();
+    if (!['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return;
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey
+      || event.composedPath().some(element => element instanceof HTMLElement
+        && (element.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(element.tagName)))) return;
+    const down = ['ArrowDown', 'PageDown', 'End'].includes(event.key)
+      || (event.key === ' ' && !event.shiftKey);
+    if (nestedScrollCanMove(event, down ? 1 : -1)) return;
+    if (!down) { stop(); return; }
+    const amount = event.key === 'End' ? maxScroll() - window.scrollY
+      : event.key === 'ArrowDown' ? 40 : window.innerHeight * .9;
+    if (!holdForward(Math.max(window.scrollY, frame ? target : window.scrollY) + amount, event)) stop();
+  }
+
+  function pointerStarted() {
+    if (!heldPull) stop();
+  }
+
+  function touchStarted(event) {
+    touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
+    if (!heldPull) stop();
+  }
+
+  function touchMoved(event) {
+    if (touchY === null || event.touches.length !== 1) return;
+    const nextY = event.touches[0].clientY;
+    const delta = touchY - nextY;
+    touchY = nextY;
+    if (event.defaultPrevented || nestedScrollCanMove(event, Math.sign(delta))) return;
+    if (delta < 0 && heldPull) stop();
+    else if (delta > 0) holdForward(Math.max(window.scrollY, frame ? target : window.scrollY) + delta, event);
+  }
+
+  function touchEnded() {
+    touchY = null;
   }
 
   function cleanup() {
     stop();
     window.removeEventListener('wheel', wheel);
     window.removeEventListener('scroll', scrolled);
-    window.removeEventListener('touchstart', stop);
-    window.removeEventListener('pointerdown', stop);
+    window.removeEventListener('touchstart', touchStarted);
+    window.removeEventListener('touchmove', touchMoved);
+    window.removeEventListener('touchend', touchEnded);
+    window.removeEventListener('touchcancel', touchEnded);
+    window.removeEventListener('pointerdown', pointerStarted);
     window.removeEventListener('keydown', keyed);
     window.removeEventListener('resize', resized);
     window.removeEventListener('pageshow', stop);
@@ -176,8 +351,11 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
 
   window.addEventListener('wheel', wheel, { passive: false });
   window.addEventListener('scroll', scrolled, { passive: true });
-  window.addEventListener('touchstart', stop, { passive: true });
-  window.addEventListener('pointerdown', stop, { passive: true });
+  window.addEventListener('touchstart', touchStarted, { passive: true });
+  window.addEventListener('touchmove', touchMoved, { passive: false });
+  window.addEventListener('touchend', touchEnded, { passive: true });
+  window.addEventListener('touchcancel', touchEnded, { passive: true });
+  window.addEventListener('pointerdown', pointerStarted, { passive: true });
   window.addEventListener('keydown', keyed);
   window.addEventListener('resize', resized, { passive: true });
   window.addEventListener('pageshow', stop);

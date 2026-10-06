@@ -33,6 +33,7 @@
 
 * { box-sizing: border-box; }
 html { scrollbar-width: none; }
+html.is-fishing-scroll-held { overflow-y: hidden; scrollbar-gutter: stable; }
 html, body { overscroll-behavior-y: none; }
 html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
 body { position: relative; margin: 0; }
@@ -631,22 +632,29 @@ a:hover { color: #efee74; }
   background-position: calc(-1 * var(--crop-x) * var(--fishing-unit)) calc(-1 * var(--crop-y) * var(--fishing-unit));
   image-rendering: pixelated;
 }
-.fishing-sprite-source { display: none; }
+.fishing-sprite-source, .fishing-pull-source { display: none; }
 .fishing-pose--reach { --art-scale: 2.14; --crop-x: 188; --crop-y: 55; --crop-width: 251; --crop-height: 558; --anchor: 125; }
 .fishing-pose--ready { --art-scale: 2.18; --crop-x: 697; --crop-y: 45; --crop-width: 370; --crop-height: 568; --anchor: 251; }
 .fishing-pose--cast { --art-scale: 2.23; --crop-x: 108; --crop-y: 675; --crop-width: 603; --crop-height: 537; --anchor: 120; }
 .fishing-pose--idle { --art-scale: 2.25; --crop-x: 757; --crop-y: 680; --crop-width: 473; --crop-height: 532; --anchor: 135; }
+.fishing-pose--pull {
+  --art-scale: 1.31; --crop-x: 66; --crop-y: 140;
+  --crop-width: 1124; --crop-height: 1066; --anchor: 384;
+  background-image: url('/images/alex-rivkin-fishing-pull.png');
+  background-size: calc(1225 * var(--fishing-unit)) calc(1284 * var(--fishing-unit));
+}
 .fishing-actor[data-pose="reach"] .fishing-pose--reach,
 .fishing-actor[data-pose="ready"] .fishing-pose--ready,
 .fishing-actor[data-pose="cast"] .fishing-pose--cast,
-.fishing-actor[data-pose="idle"] .fishing-pose--idle { display: block; }
+.fishing-actor[data-pose="idle"] .fishing-pose--idle,
+.fishing-actor[data-pose="pull"] .fishing-pose--pull { display: block; }
 .fishing-line-upper {
   position: absolute;
-  left: calc(975.25 * var(--sprite-unit));
-  top: calc(113.25 * var(--sprite-unit));
+  left: calc(var(--fishing-tip-x, 975.25) * var(--sprite-unit));
+  top: calc(var(--fishing-tip-y, 113.25) * var(--sprite-unit));
   display: none;
   width: 1.5px;
-  height: calc(1250 * var(--sprite-unit) + 100lvh);
+  height: var(--fishing-line-height, calc(1250 * var(--sprite-unit) + 100lvh));
   background: #171715;
   transform-origin: top;
 }

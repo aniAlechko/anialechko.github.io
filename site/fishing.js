@@ -1,8 +1,9 @@
-export function initFishing({ getHoldDistance = () => 0 } = {}) {
+export function initFishing({ getHoldDistance = () => 0, getPullRange = () => null } = {}) {
   const actor = document.querySelector('.descent-actor');
   const scene = document.querySelector('#descent-scene');
   const fishing = document.querySelector('.fishing-actor');
   const image = document.querySelector('.fishing-sprite-source');
+  const pullImage = document.querySelector('.fishing-pull-source');
   if (![actor, scene, fishing, image].every(Boolean)) {
     return { setRoute() {}, cleanup() {} };
   }
@@ -25,6 +26,11 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
   let lineAnimation = null;
   let lineProgress = 0;
   let lastTime = null;
+  let pullReady = false;
+  let pullFailed = !pullImage;
+  let pullPreparedAt = null;
+  let spriteUnit = 0;
+  let lastLineHeight;
 
   function setLineProgress(progress) {
     const value = progress.toFixed(4);
@@ -50,6 +56,22 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
     if (spritePose !== lastPose) {
       fishing.dataset.pose = spritePose;
       lastPose = spritePose;
+      pullPreparedAt = spritePose === 'pull' ? performance.now() : null;
+      actor.style.setProperty('--fishing-tip-x', spritePose === 'pull' ? '1198.65' : '975.25');
+      actor.style.setProperty('--fishing-tip-y', spritePose === 'pull' ? '-12.6' : '113.25');
+    }
+  }
+
+  function positionRig(scroll, range) {
+    if (!range || !route || !spriteUnit) return;
+    const tipY = lastPose === 'pull' ? -12.6 : 113.25;
+    // Both sections and the actor stay in the same document flow. Connect the
+    // tip to their shared edge, not an arbitrary long string.
+    const actorTop = route.landingTop - Math.max(0, scroll - range.start);
+    const height = `${Math.max(0, range.end - scroll - actorTop - tipY * spriteUnit + 2).toFixed(2)}px`;
+    if (height !== lastLineHeight) {
+      actor.style.setProperty('--fishing-line-height', height);
+      lastLineHeight = height;
     }
   }
 
@@ -91,6 +113,7 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
     if (disposed || document.hidden) return;
     const hold = getHoldDistance();
     const scroll = window.scrollY;
+    const pullRange = getPullRange();
     if (!ready || failed || !route || scene.dataset.state !== 'landed'
       || !Number.isFinite(hold) || hold <= 0 || !Number.isFinite(scroll)) {
       reset();
@@ -136,7 +159,10 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
         to: next, elapsed: 0,
       };
     }
-    showPose(poses[transition ? transition.low + 1 : stage]);
+    const pulling = !transition && stage === 4 && target === 4 && lineProgress === 1
+      && pullReady && pullRange && scroll >= pullRange.start - hold * .16;
+    showPose(pulling ? 'pull' : poses[transition ? transition.low + 1 : stage]);
+    positionRig(scroll, pullRange);
     if (transition || lineAnimation) schedule();
     else lastTime = null;
   }
@@ -182,11 +208,35 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
     ready = true;
     schedule();
   }).catch(imageFailed);
+  if (pullImage) {
+    pullImage.decode().then(() => {
+      if (disposed) return;
+      if (!pullImage.naturalWidth) throw new Error('Pull image is unavailable.');
+      pullReady = true;
+      schedule();
+    }).catch(() => {
+      if (disposed) return;
+      pullFailed = true;
+      schedule();
+    });
+  }
 
   return {
+    getPullMotion() {
+      const range = getPullRange();
+      // Loading is a closed gate, not permission to skip the sequence. An
+      // actual asset failure releases it so the page remains reachable.
+      if (disposed || failed || pullFailed || reducedMotion.matches || !range) return null;
+      return {
+        ...range,
+        ready: ready && pullReady && stage === 4 && lineProgress === 1 && !transition && pullPreparedAt !== null
+          && performance.now() - pullPreparedAt >= 180,
+      };
+    },
     setRoute(nextRoute) {
       if (disposed) return;
       route = Number.isFinite(nextRoute?.total) && nextRoute.total > 0 ? nextRoute : null;
+      spriteUnit = parseFloat(scene.style.getPropertyValue('--sprite-unit')) || 0;
       cancelAnimationFrame(frame);
       frame = 0;
       if (!route) reset();
@@ -205,6 +255,9 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
       image.removeEventListener('error', imageFailed);
       reset();
       actor.style.removeProperty('--fishing-line-progress');
+      for (const property of ['--fishing-tip-x', '--fishing-tip-y', '--fishing-line-height']) {
+        actor.style.removeProperty(property);
+      }
     },
   };
 }

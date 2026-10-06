@@ -72,20 +72,26 @@ window.addEventListener('scroll', skipOnScroll, { passive: true });
 skipOnScroll();
 let smoothScroll;
 let garden;
+let fishing;
 try {
-  smoothScroll = initSmoothScroll({ onInteraction: skipIntro });
+  smoothScroll = initSmoothScroll({
+    onInteraction: skipIntro,
+    getPullMotion: () => fishing?.getPullMotion?.() ?? null,
+  });
 } catch (error) {
   console.warn('Scroll easing unavailable; native scrolling remains usable.', error);
 }
 let clouds;
-let fishing;
 try {
   garden = initGarden();
 } catch (error) {
   console.warn('Garden unavailable; the portfolio remains usable.', error);
 }
 try {
-  fishing = initFishing({ getHoldDistance: () => garden?.getHoldDistance?.() ?? 0 });
+  fishing = initFishing({
+    getHoldDistance: () => garden?.getHoldDistance?.() ?? 0,
+    getPullRange: () => garden?.getPullRange?.() ?? null,
+  });
 } catch (error) {
   console.warn('Fishing unavailable; the character remains visible.', error);
 }

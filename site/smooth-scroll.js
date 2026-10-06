@@ -13,6 +13,7 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   let previousTime = 0;
   let direction = 0;
   let nativeWheelUntil = 0;
+  let mouseWheelUntil = 0;
   let lastWheelTime = 0;
   let strength = 0;
   let responseTime = 180;
@@ -44,6 +45,7 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
     direction = 0;
     strength = 0;
     lastWheelTime = 0;
+    mouseWheelUntil = 0;
     position = target = ownScroll = window.scrollY;
   }
 
@@ -83,9 +85,11 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
     }
     const now = performance.now();
     const sign = Math.sign(event.deltaY);
-    // Touchpads already provide momentum. Keep their continuous gestures native.
+    // Keep the input mode stable within a gesture. High-resolution mouse wheels
+    // can report fractional values or smaller deltas after the first notch.
     const continuous = event.deltaMode === 0
-      && (Math.abs(event.deltaY) < 40 || !Number.isInteger(event.deltaY) || now < nativeWheelUntil);
+      && now >= mouseWheelUntil
+      && (Math.abs(event.deltaY) < 40 || now < nativeWheelUntil);
     if (continuous || nestedScrollCanMove(event, sign)) {
       if (continuous) nativeWheelUntil = now + 180;
       stop();
@@ -96,6 +100,8 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
     if (!Number.isFinite(delta)) return;
     const maximum = maxScroll();
     if (!maximum) return;
+    mouseWheelUntil = now + 180;
+    nativeWheelUntil = 0;
     const interval = now - lastWheelTime;
     const reversing = direction && direction !== sign;
     const continuing = frame && direction === sign && interval < 340;

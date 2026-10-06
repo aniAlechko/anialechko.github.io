@@ -6,7 +6,6 @@ export function initGarden() {
   const journey = document.querySelector('.journey');
   const hero = document.querySelector('.hero');
   if (!garden || !daylight || !journey || !hero) return { setRoute() {}, cleanup() {} };
-  const statementStage = document.querySelector('#statement-stage');
   const statement = garden.querySelector('.garden-statement');
   const landing = document.querySelector('#landing');
   const rabbits = initGardenRabbits(garden);
@@ -17,7 +16,7 @@ export function initGarden() {
   let disposed = false;
   let gardenTop = 0;
   let gardenHeight = 0;
-  let holdDistance = 0;
+  let fishingDistance = 0;
   let pullDistance = 0;
   let lastTop;
 
@@ -25,9 +24,9 @@ export function initGarden() {
     frame = 0;
     if (disposed || !ready) return;
     const scroll = Math.max(0, window.scrollY);
-    const hold = route ? Math.max(0, Math.min(holdDistance, scroll - route.total)) : 0;
-    const playing = !document.hidden && scroll + window.innerHeight > gardenTop + hold
-      && scroll < gardenTop + hold + gardenHeight;
+    const artBottom = gardenTop + gardenHeight;
+    const playing = !document.hidden && scroll + window.innerHeight > artBottom - (route?.heroHeight || gardenHeight)
+      && scroll < artBottom;
     rabbits.setPlaying(playing);
   }
 
@@ -38,12 +37,9 @@ export function initGarden() {
     if (!ready) return;
     const heroHeight = route?.heroHeight || hero.getBoundingClientRect().height;
     gardenHeight = Math.max(heroHeight, route?.sceneHeight || route?.arrivalBottom || 0);
-    holdDistance = route && statementStage ? heroHeight : 0;
+    fishingDistance = route?.fishingDistance || 0;
     pullDistance = route && landing
       ? Math.max(0, heroHeight + route.sceneHeight - route.total) : 0;
-    if (statementStage) statementStage.style.height = `${holdDistance}px`;
-    journey.style.setProperty('--scene-hold-distance', `${holdDistance}px`);
-    journey.style.setProperty('--scene-pin-top', `${route ? -route.total : 0}px`);
     garden.style.height = `${gardenHeight}px`;
     garden.style.top = route ? `${heroHeight}px` : '0px';
     if (statement) {
@@ -87,10 +83,10 @@ export function initGarden() {
   });
 
   return {
-    getHoldDistance: () => disposed ? 0 : holdDistance,
+    getFishingDistance: () => disposed ? 0 : fishingDistance,
     getPullRange: () => !disposed && route && pullDistance > 0 ? {
-      start: route.total + holdDistance,
-      end: route.total + holdDistance + pullDistance,
+      start: route.total,
+      end: route.total + pullDistance,
     } : null,
     setRoute(nextRoute) {
       if (disposed) return;
@@ -112,9 +108,6 @@ export function initGarden() {
       window.removeEventListener('resize', resized);
       document.removeEventListener('visibilitychange', schedule);
       journey.classList.remove('has-static-garden');
-      journey.style.removeProperty('--scene-hold-distance');
-      journey.style.removeProperty('--scene-pin-top');
-      if (statementStage) statementStage.style.height = '0px';
       statement?.style.removeProperty('top');
       garden.style.removeProperty('--mountains-top');
       garden.style.removeProperty('--mountains-height');

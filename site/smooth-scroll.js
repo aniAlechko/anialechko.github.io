@@ -4,6 +4,8 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   if (currentController) return currentController;
   const page = document.documentElement;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const wheelResponseTime = 240;
+  const reverseResponseTime = 120;
   const clamp = (value, max) => Math.max(0, Math.min(max, value));
   const maxScroll = () => Math.max(0, page.scrollHeight - window.innerHeight);
   let frame = 0;
@@ -14,7 +16,7 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   let direction = 0;
   let nativeWheelUntil = 0;
   let mouseWheelUntil = 0;
-  let responseTime = 160;
+  let responseTime = wheelResponseTime;
   let resizeFrame = 0;
   let resizePending = false;
 
@@ -92,7 +94,7 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
     const reversing = direction && direction !== sign;
     // Ease the full wheel distance, without capping a strong gesture or waiting
     // for scene animations. Touch and continuous trackpad momentum stay native.
-    responseTime = reversing ? 100 : 160;
+    responseTime = reversing ? reverseResponseTime : wheelResponseTime;
     if (!frame || reversing) {
       position = target = ownScroll = window.scrollY;
     }

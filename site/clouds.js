@@ -8,7 +8,7 @@ const shapes = [
 ];
 const imageSizes = { bank: [1983, 793], cumulus: [1586, 992] };
 
-export function initClouds({ getHoldDistance = () => 0 } = {}) {
+export function initClouds() {
   const scene = document.querySelector('.cloud-scene');
   if (!scene) return { setRoute() {}, cleanup() {} };
   const descent = document.querySelector('#descent-scene');
@@ -68,12 +68,8 @@ export function initClouds({ getHoldDistance = () => 0 } = {}) {
     return cloud;
   });
 
-  function cameraScroll(scroll) {
-    return scroll - clamp(scroll - total, 0, getHoldDistance());
-  }
-
   function inView(cloud, scroll) {
-    const camera = cameraScroll(scroll);
+    const camera = scroll;
     const top = cloud.top + camera * cloud.scrollDepth - camera;
     return top < window.innerHeight && top + cloud.height > 0;
   }
@@ -159,7 +155,7 @@ export function initClouds({ getHoldDistance = () => 0 } = {}) {
     frame = 0;
     if (disposed) return;
     const scroll = Math.max(0, window.scrollY);
-    const camera = cameraScroll(scroll);
+    const camera = scroll;
     const enabled = total > 0 && !motion.matches;
     const active = enabled && !document.hidden
       && clouds.some(cloud => cloud.ready && inView(cloud, scroll));

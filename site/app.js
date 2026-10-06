@@ -88,7 +88,7 @@ try {
 }
 try {
   fishing = initFishing({
-    getHoldDistance: () => garden?.getHoldDistance?.() ?? 0,
+    getFishingDistance: () => garden?.getFishingDistance?.() ?? 0,
     getPullRange: () => garden?.getPullRange?.() ?? null,
   });
 } catch (error) {
@@ -115,7 +115,7 @@ try {
   console.warn('Local time unavailable; contact details remain visible.', error);
 }
 try {
-  clouds = initClouds({ getHoldDistance: () => garden?.getHoldDistance?.() ?? 0 });
+  clouds = initClouds();
 } catch (error) {
   console.warn('Clouds unavailable; character descent remains usable.', error);
 }

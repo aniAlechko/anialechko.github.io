@@ -1,9 +1,8 @@
-export function initFishing({ getHoldDistance = () => 0, getPullRange = () => null } = {}) {
+export function initFishing({ getFishingDistance = () => 0, getPullRange = () => null } = {}) {
   const actor = document.querySelector('.descent-actor');
   const scene = document.querySelector('#descent-scene');
   const fishing = document.querySelector('.fishing-actor');
   const image = document.querySelector('.fishing-sprite-source');
-  const pullImage = document.querySelector('.fishing-pull-source');
   if (![actor, scene, fishing, image].every(Boolean)) {
     return { setRoute() {}, cleanup() {} };
   }
@@ -21,16 +20,12 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
   const transitionDuration = 180;
   const lineDuration = 360;
   const poses = ['standing', 'reach', 'ready', 'cast', 'idle'];
-  const rodTips = {
-    idle: { x: 975.25, y: 113.25 },
-    pull: { x: 1304.76, y: -15.8 },
-  };
+  const rodTip = { x: 975.25, y: 113.25 };
   let stage = 0;
   let transition = null;
   let lineAnimation = null;
   let lineProgress = 0;
   let lastTime = null;
-  let pullReady = false;
   let spriteUnit = 0;
   let lastLineHeight;
 
@@ -58,19 +53,17 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
     if (spritePose !== lastPose) {
       fishing.dataset.pose = spritePose;
       lastPose = spritePose;
-      const tip = rodTips[spritePose] || rodTips.idle;
-      actor.style.setProperty('--fishing-tip-x', String(tip.x));
-      actor.style.setProperty('--fishing-tip-y', String(tip.y));
+      actor.style.setProperty('--fishing-tip-x', String(rodTip.x));
+      actor.style.setProperty('--fishing-tip-y', String(rodTip.y));
     }
   }
 
   function positionRig(scroll, range) {
     if (!range || !route || !spriteUnit) return;
-    const tipY = (rodTips[lastPose] || rodTips.idle).y;
     // Both sections and the actor stay in the same document flow. Connect the
     // tip to their shared edge, not an arbitrary long string.
     const actorTop = route.landingTop - Math.max(0, scroll - range.start);
-    const height = `${Math.max(0, range.end - scroll - actorTop - tipY * spriteUnit + 2).toFixed(2)}px`;
+    const height = `${Math.max(0, range.end - scroll - actorTop - rodTip.y * spriteUnit + 2).toFixed(2)}px`;
     if (height !== lastLineHeight) {
       actor.style.setProperty('--fishing-line-height', height);
       lastLineHeight = height;
@@ -113,17 +106,19 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
   function render() {
     frame = 0;
     if (disposed || document.hidden) return;
-    const hold = getHoldDistance();
+    const distance = getFishingDistance();
     const scroll = window.scrollY;
     const pullRange = getPullRange();
     if (!ready || failed || !route || scene.dataset.state !== 'landed'
-      || !Number.isFinite(hold) || hold <= 0 || !Number.isFinite(scroll)) {
+      || !Number.isFinite(distance) || distance <= 0 || !Number.isFinite(scroll)) {
       reset();
       return;
     }
     // Scroll selects resting poses; reach and cast are timed intermediates.
-    const target = scroll < route.total + hold * .20 ? 0
-      : scroll < route.total + hold * .60 ? 2 : 4;
+    // Fit the poses into the visible landscape rather than reserving page
+    // distance for them. A fast scroll can always leave the scene immediately.
+    const target = scroll < route.total + distance * .10 ? 0
+      : scroll < route.total + distance * .25 ? 2 : 4;
     const now = performance.now();
     const elapsed = lastTime === null ? 0 : Math.min(64, Math.max(0, now - lastTime));
     lastTime = now;
@@ -163,9 +158,7 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
         to: target, elapsed: 0,
       };
     }
-    const pulling = !transition && stage === 4 && target === 4 && lineProgress === 1
-      && pullReady && pullRange && scroll >= pullRange.start - hold * .16;
-    showPose(pulling ? 'pull' : poses[transition ? transition.low + 1 : stage]);
+    showPose(poses[transition ? transition.low + 1 : stage]);
     positionRig(scroll, pullRange);
     if (transition || lineAnimation) schedule();
     else lastTime = null;
@@ -212,19 +205,6 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
     ready = true;
     schedule();
   }).catch(imageFailed);
-  if (pullImage) {
-    pullImage.decode().then(() => {
-      if (disposed) return;
-      if (!pullImage.naturalWidth) throw new Error('Pull image is unavailable.');
-      pullReady = true;
-      schedule();
-    }).catch(() => {
-      if (disposed) return;
-      // The ordinary fishing pose remains usable if the optional pull art fails.
-      schedule();
-    });
-  }
-
   return {
     setRoute(nextRoute) {
       if (disposed) return;

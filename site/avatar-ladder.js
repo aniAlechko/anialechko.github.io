@@ -71,6 +71,8 @@ export function initDescent({
   function actorTravel(scroll) {
     const progress = clamp(scroll / geometry.total, 0, 1);
     const dropProgress = progress * progress * (3 - 2 * progress);
+    // Land at a fixed point in the landscape. Further scrolling carries the
+    // character and its surroundings together in normal document flow.
     return progress * geometry.total + dropProgress * geometry.landingDrop;
   }
 
@@ -190,7 +192,7 @@ export function initDescent({
       hideScene();
       snapNext = true;
     }
-    // Continue below the cloud bank before pinning the landing viewport.
+    // Continue below the cloud bank before the character lands.
     const total = heroHeight + descentDepth;
     const steps = Math.max(1, Math.ceil((total + landingDrop) / pitch));
     const xUnit = unit * 380 / 299;
@@ -205,8 +207,7 @@ export function initDescent({
     scene.style.setProperty('--sprite-unit', `${unit}px`);
     scene.style.setProperty('--ladder-x-unit', `${xUnit}px`);
     scene.style.setProperty('--ladder-y-unit', `${yUnit}px`);
-    // Keep a complete arrival screen before contact, including Safari's largest
-    // viewport. Its toolbar can then resize without moving either section.
+    // Reserve the arrival landscape only; no extra screen for fishing.
     stage.style.height = `calc(${total - heroHeight}px + max(100lvh, ${arrivalBottom}px))`;
     actor.style.left = `${center - 524 * unit / 2}px`;
     actor.style.top = `${top}px`;
@@ -234,9 +235,10 @@ export function initDescent({
       }
       strip.append(fragment);
     }
+    const sceneHeight = stage.getBoundingClientRect().height;
     onLayout({ pitch, total, heroHeight, arrivalBottom,
       viewportHeight: stableHeight, landingTop: top + landingDrop,
-      sceneHeight: stage.getBoundingClientRect().height });
+      fishingDistance: Math.max(0, heroHeight + sceneHeight - total), sceneHeight });
     return true;
   }
 

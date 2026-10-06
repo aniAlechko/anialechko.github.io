@@ -89,7 +89,12 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
 
   fishing.hidden = true;
   actor.classList.remove('is-fishing', 'is-fishing-line');
-  const observer = new MutationObserver(schedule);
+  // A resize can change the climb state without another scroll event.
+  // Match the fishing pose before painting the newly positioned character.
+  const observer = new MutationObserver(() => {
+    cancelAnimationFrame(frame);
+    render();
+  });
   observer.observe(scene, { attributes: true, attributeFilter: ['data-state'] });
   window.addEventListener('scroll', schedule, { passive: true });
   window.addEventListener('resize', schedule, { passive: true });

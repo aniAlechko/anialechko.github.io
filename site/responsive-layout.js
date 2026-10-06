@@ -131,6 +131,8 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
   let mode;
   let transition;
   let frame = 0;
+  let viewportSize;
+  const visibleViewport = window.visualViewport;
   const transitionDuration = 800;
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const pixels = value => `${value}px`;
@@ -158,8 +160,18 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     return mode;
   }
   function viewport() {
-    return { width: window.innerWidth,
-      height: parseFloat(getComputedStyle(hero).minHeight) || window.innerHeight };
+    const width = window.innerWidth;
+    const smallHeight = parseFloat(getComputedStyle(hero).minHeight) || window.innerHeight;
+    const unzoomed = !visibleViewport || Math.abs(visibleViewport.scale - 1) < .01;
+    const visibleHeight = unzoomed ? (visibleViewport?.height || window.innerHeight) : smallHeight;
+    const layoutChanged = !viewportSize || viewportSize.width !== width
+      || Math.abs(viewportSize.smallHeight - smallHeight) > .5;
+    // Cover Safari's actual opening viewport, which can be taller than 100svh.
+    // Once scrolling begins, toolbar movement must not resize the climb route.
+    if (layoutChanged || (unzoomed && Math.abs(window.scrollY) <= .5)) {
+      viewportSize = { width, smallHeight, height: Math.max(smallHeight, visibleHeight) };
+    }
+    return { width, height: viewportSize.height };
   }
   function animate(time) {
     frame = 0;
@@ -192,6 +204,7 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     layout = getHeroLayout({ ...size, metrics, ...currentMode });
     hero.classList.add('layout-managed');
     hero.style.height = pixels(layout.height);
+    hero.style.setProperty('--hero-viewport-height', pixels(size.height));
     hero.style.setProperty('--character-height', pixels(layout.character.height));
     hero.style.setProperty('--character-width', pixels(layout.character.width));
     hero.style.setProperty('--layout-name-size', pixels(layout.nameSize));
@@ -234,8 +247,7 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
   function resized() {
     if (disposed) return;
     const size = viewport();
-    // Mobile browser controls can resize innerHeight without changing 100svh.
-    // Leave the scene and its scroll anchor alone when the layout is unchanged.
+    // Toolbar changes during scrolling leave the captured scene height intact.
     if (lastCommit && lastCommit.width === size.width && lastCommit.height === size.height
       && !(transition && reducedMotion?.matches)) return;
     const target = getMode(size.width, size.height);
@@ -251,8 +263,16 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     }
     commit(time, size);
   }
+  function returnedToTop() {
+    if (Math.abs(window.scrollY) <= .5) resized();
+  }
   window.addEventListener('resize', resized, { passive: true });
+  window.addEventListener('scroll', returnedToTop, { passive: true });
+  visibleViewport?.addEventListener('resize', resized, { passive: true });
   reducedMotion?.addEventListener('change', resized);
+  // Establish the covered viewport before the garden can be revealed, even
+  // while fonts are pending. Font completion only refines the text measurements.
+  commit();
   Promise.resolve(layoutReady).then(() => {
     if (disposed) return;
     metrics = { nameWidths: measureWidths(names), introWidths: measureWidths(introRows, intro),
@@ -275,6 +295,8 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     frame = 0;
     listeners.clear();
     window.removeEventListener('resize', resized);
+    window.removeEventListener('scroll', returnedToTop);
+    visibleViewport?.removeEventListener('resize', resized);
     reducedMotion?.removeEventListener('change', resized);
   } };
 }

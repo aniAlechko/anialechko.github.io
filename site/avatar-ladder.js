@@ -43,7 +43,6 @@ export function initDescent({
   let settledEndpoint = null;
   let swapTimer = 0;
   let turnTimer = 0;
-  let assetTimer = 0;
   let speechAnimations = [];
   let speechRun = 0;
   let renderedPose;
@@ -168,10 +167,13 @@ export function initDescent({
     const jumpOffset = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
     const top = bounds.top + window.scrollY - jumpOffset;
     const pitch = 224 * unit;
-    const stableHeight = parseFloat(getComputedStyle(hero).minHeight) || heroHeight;
+    const heroStyle = getComputedStyle(hero);
+    const stableHeight = parseFloat(heroStyle.getPropertyValue('--hero-viewport-height'))
+      || parseFloat(heroStyle.minHeight) || heroHeight;
     const actorHeight = 1249 * unit;
     const landingDrop = Math.max(0, stableHeight - clamp(stableHeight * .01, 6, 12) - actorHeight - top);
     const arrivalBottom = top + landingDrop + actorHeight + 16;
+    const descentDepth = clamp(stableHeight * .20, 96, 200);
     const tolerance = typeof subscribeLayout === 'function' ? .01 : .5;
     // A browser-toolbar resize is not a new layout. Keep the current pose,
     // ladder nodes, and arrival animation when the page itself has not moved.
@@ -180,6 +182,7 @@ export function initDescent({
       && Math.abs(geometry.unit * 1180 - bounds.height) < tolerance
       && Math.abs(geometry.center - center) < tolerance
       && Math.abs(geometry.arrivalBottom - arrivalBottom) < tolerance
+      && Math.abs(geometry.viewportHeight - stableHeight) < tolerance
       && Math.abs(geometry.top - top) < tolerance) {
       return;
     }
@@ -187,8 +190,8 @@ export function initDescent({
       hideScene();
       snapNext = true;
     }
-    // Keep the original climb length and finish lower in the landing viewport.
-    const total = heroHeight;
+    // Continue below the cloud bank before pinning the landing viewport.
+    const total = heroHeight + descentDepth;
     const steps = Math.max(1, Math.ceil((total + landingDrop) / pitch));
     const xUnit = unit * 380 / 299;
     const yUnit = unit * 224 / 217;
@@ -197,7 +200,7 @@ export function initDescent({
     const ladderEnd = total + arrivalBottom;
     const tileCount = Math.ceil((ladderEnd - ladderTop) / pitch);
     geometry = { unit, pitch, steps, total, top, center, heroHeight, landingDrop,
-      arrivalBottom, width: window.innerWidth };
+      arrivalBottom, viewportHeight: stableHeight, width: window.innerWidth };
 
     scene.style.setProperty('--sprite-unit', `${unit}px`);
     scene.style.setProperty('--ladder-x-unit', `${xUnit}px`);
@@ -231,7 +234,9 @@ export function initDescent({
       }
       strip.append(fragment);
     }
-    onLayout({ pitch, total, heroHeight, arrivalBottom });
+    onLayout({ pitch, total, heroHeight, arrivalBottom,
+      viewportHeight: stableHeight, landingTop: top + landingDrop,
+      sceneHeight: stage.getBoundingClientRect().height });
     return true;
   }
 
@@ -342,6 +347,38 @@ export function initDescent({
     setState('climbing');
   }
 
+  function reconcileResize(scroll, bottom) {
+    snapNext = false;
+    if (scroll <= .5) {
+      if (active) hideScene();
+      return;
+    }
+
+    const atBottom = scroll >= bottom - .5
+      || ((turnDestination === 'bottom' || settledEndpoint === 'bottom')
+        && scroll >= bottom - clamp(geometry.pitch * .5, 12, 24));
+    const atTop = active && !atBottom && scroll <= Math.min(geometry.pitch * .2, 12)
+      && (turnDestination === 'top' || settledEndpoint === 'top');
+    if (!active) activate(false);
+    // Keep an existing turn only while it still belongs to the resized route.
+    if (atTop || (atBottom && (turnDestination === 'bottom' || settledEndpoint === 'bottom'))) return;
+    if (!atBottom && (turnDestination === 'back' || deploymentFrame
+      || (renderedState === 'climbing' && !settledEndpoint && !turnDestination))) return;
+
+    cancelTurn();
+    cancelSpeechReplay();
+    setReturnReady(false);
+    scene.classList.add('is-active');
+    settledEndpoint = atBottom ? 'bottom' : null;
+    if (atBottom) {
+      setPose('front');
+      setLanded(true);
+      setState('landed');
+    } else {
+      placeActor(clamp(Math.round(travel / geometry.pitch), 0, geometry.steps));
+    }
+  }
+
   function render(resizing = false) {
     frame = 0;
     if (disposed) return;
@@ -359,17 +396,13 @@ export function initDescent({
       const endpointMargin = Math.min(geometry.pitch * 0.2, 12);
       const headingTop = target === null ? !descending : target <= 0.5;
       const headingBottom = target === null ? !reversing : target >= bottom - 0.5;
-      const preserveMode = active && (resizing || resizeAnchorFrame
-        || (preserveResizeMode && !reversing && !descending));
+      const preserveMode = resizing || resizeAnchorFrame
+        || (preserveResizeMode && !reversing && !descending);
       travel = actorTravel(scroll);
       moveActor();
       if (preserveMode) {
         preserveResizeMode = true;
-        // A completed deployment still becomes climbing; geometry changes must
-        // not otherwise exchange the pose, reopen the ladder, or replay a turn.
-        if (!turnDestination && !deploymentFrame && renderedState === 'deploying') {
-          setState('climbing');
-        }
+        reconcileResize(scroll, bottom);
         return;
       }
       preserveResizeMode = false;
@@ -433,12 +466,13 @@ export function initDescent({
     // Follow the responsive layout's displayed geometry in the same frame.
     render(true);
     cancelAnimationFrame(resizeAnchorFrame);
-    resizeAnchorFrame = active ? requestAnimationFrame(() => {
+    resizeAnchorFrame = geometry && assetsReady ? requestAnimationFrame(() => {
       resizeAnchorFrame = 0;
-      // Stage reflow can move the browser's scroll anchor after resize. Adopt
-      // that position without treating it as a new climb or arrival gesture.
-      lastScroll = clamp(window.scrollY, 0,
-        Math.max(0, document.documentElement.scrollHeight - window.innerHeight));
+      // Browser anchoring can settle after reflow. Reconcile that final position
+      // too, without starting a new turn or changing the page's scroll offset.
+      cancelAnimationFrame(frame);
+      frame = 0;
+      render(true);
     }) : 0;
   }
 
@@ -453,7 +487,6 @@ export function initDescent({
     disposed = true;
     cancelAnimationFrame(frame);
     cancelAnimationFrame(resizeAnchorFrame);
-    clearTimeout(assetTimer);
     window.removeEventListener('scroll', schedule);
     if (unsubscribeLayout) unsubscribeLayout();
     else window.removeEventListener('resize', resized);
@@ -487,22 +520,20 @@ export function initDescent({
     if (!disposed) fail(error);
   });
 
-  Promise.race([
-    Promise.all([layoutReady, ...[...Object.values(poses), probe].map(async image => {
-      await image.decode();
-      if (!image.naturalWidth) throw new Error('A descent image could not be loaded.');
-    })]),
-    new Promise((_, reject) => {
-      assetTimer = setTimeout(() => reject(new Error('Descent images timed out.')), 8000);
-    }),
-  ]).then(() => {
-    clearTimeout(assetTimer);
+  // Slow downloads can finish after the visitor has started scrolling. Keep
+  // the reserved route throughout loading, including when an image fails.
+  Promise.all([layoutReady, ...[...Object.values(poses), probe].map(async image => {
+    await image.decode();
+    if (!image.naturalWidth) throw new Error('A descent image could not be loaded.');
+  })]).then(() => {
     if (disposed) return;
     assetsReady = true;
     schedule();
   }).catch(error => {
-    clearTimeout(assetTimer);
-    if (!disposed) fail(error);
+    if (disposed) return;
+    // Leave the animation hidden but retain geometry and resize subscriptions;
+    // cleanup would collapse the stage and move the visitor's scroll position.
+    console.warn('Descent images unavailable; scene space remains reserved.', error);
   });
 
   return cleanup;

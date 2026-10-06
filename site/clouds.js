@@ -83,7 +83,7 @@ export function initClouds({ getHoldDistance = () => 0 } = {}) {
     width = window.innerWidth;
     const statementBounds = statement?.getBoundingClientRect();
     const statementTop = statementBounds?.height > 0 && garden
-      ? statementBounds.top - garden.getBoundingClientRect().top
+      ? statementBounds.top - garden.getBoundingClientRect().top - Math.max(0, total - heroHeight)
       : heroHeight * .32;
     landingSkyHeight = Math.max(0, Math.min(heroHeight * .34, statementTop - 20));
     for (const cloud of clouds) measureCloud(cloud);
@@ -116,11 +116,12 @@ export function initClouds({ getHoldDistance = () => 0 } = {}) {
     const viewportMix = clamp((width - 390) / 810, 0, 1);
     const bandPosition = clamp((cloud.end - .20) / .14, 0, 1);
     const landingBottom = .14 + viewportMix * .04 + bandPosition * (.04 + viewportMix * .01);
-    // Preserve the original parallax speed; separate heights with a fixed position only.
-    cloud.scrollDepth = total > 0
-      ? Math.min(cloud.depth, (total + heroHeight * landingBottom - cloud.top - cloud.height) / total)
+    // Keep the cloud bank on its original route. The extra descent carries it
+    // above the landing view instead of stretching it down with the section.
+    cloud.scrollDepth = heroHeight > 0
+      ? Math.min(cloud.depth, (heroHeight + heroHeight * landingBottom - cloud.top - cloud.height) / heroHeight)
       : cloud.depth;
-    const baseBottom = cloud.top + total * cloud.scrollDepth - total + cloud.height;
+    const baseBottom = cloud.top + heroHeight * cloud.scrollDepth - heroHeight + cloud.height;
     const upwardRoom = Math.max(0, cloud.top - heroHeight - 16);
     cloud.top += clamp(landingSkyHeight * cloud.landing - baseBottom,
       -Math.min(heroHeight * .08, upwardRoom), heroHeight * .09);

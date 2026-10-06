@@ -141,6 +141,18 @@ const backgroundReady = import('./background.js').then(async ({ initBackground }
   console.warn('Background unavailable; the portfolio contact page remains usable.', error);
 });
 
+const scrollIndicator = document.querySelector('.scroll-indicator');
+scrollIndicator?.setAttribute('aria-label', 'Loading portfolio');
+const sceneImagesReady = Promise.allSettled(
+  [...document.querySelectorAll('.journey img')].map(image => image.decode()),
+);
+void waitForAssets(Promise.allSettled([
+  fontsReady, backgroundReady, characterReady, sceneImagesReady,
+]), 10000).then(() => {
+  page.classList.remove('is-loading');
+  scrollIndicator?.setAttribute('aria-label', 'Scroll down');
+});
+
 await waitForAssets(Promise.all([
   fontsReady, waitForAssets(backgroundReady, 1800), characterReady,
 ]), 2000);

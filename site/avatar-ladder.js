@@ -354,14 +354,15 @@ export function initDescent({
       return;
     }
 
-    const atBottom = scroll >= bottom - .5
-      || ((turnDestination === 'bottom' || settledEndpoint === 'bottom')
-        && scroll >= bottom - clamp(geometry.pitch * .5, 12, 24));
+    // A longer route must not undo a landing without another scroll gesture.
+    // Keep its pose/turn while render() updates the responsive coordinates.
+    if (turnDestination === 'bottom' || settledEndpoint === 'bottom') return;
+
+    const atBottom = scroll >= bottom - .5;
     const atTop = active && !atBottom && scroll <= Math.min(geometry.pitch * .2, 12)
       && (turnDestination === 'top' || settledEndpoint === 'top');
     if (!active) activate(false);
-    // Keep an existing turn only while it still belongs to the resized route.
-    if (atTop || (atBottom && (turnDestination === 'bottom' || settledEndpoint === 'bottom'))) return;
+    if (atTop) return;
     if (!atBottom && (turnDestination === 'back' || deploymentFrame
       || (renderedState === 'climbing' && !settledEndpoint && !turnDestination))) return;
 

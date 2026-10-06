@@ -22,7 +22,7 @@ export function initGardenRabbits(garden) {
   function draw(rabbit, lift, pose) {
     // Align each painted pose to the same ground line within its sprite cell.
     const baseline = [0, 0, .067, .164, .016][pose];
-    rabbit.element.style.transform = `translateX(calc(${(rabbit.x * 100).toFixed(2)}% * var(--rabbit-travel, 1)))`;
+    rabbit.element.style.transform = `translateX(calc(${rabbit.x.toFixed(4)} * var(--rabbit-hop-distance, 64px)))`;
     rabbit.sprite.style.transform = `translateY(${((baseline - lift) * 100).toFixed(2)}%) scaleX(${rabbit.direction})`;
     if (pose !== rabbit.pose) {
       rabbit.sprite.style.backgroundPosition = `${(pose % 3) * 50}% ${pose < 3 ? 0 : 100}%`;

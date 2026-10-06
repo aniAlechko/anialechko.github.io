@@ -80,6 +80,9 @@ export function initClouds({ getHoldDistance = () => 0 } = {}) {
 
   function measure() {
     const previousWidth = width;
+    const previousClouds = clouds.filter(cloud => !cloud.failed)
+      .map(cloud => ({ cloud, windX: cloud.windX, width: cloud.width }))
+      .sort((a, b) => (a.windX ?? Infinity) - (b.windX ?? Infinity));
     width = window.innerWidth;
     const statementBounds = statement?.getBoundingClientRect();
     const statementTop = statementBounds?.height > 0 && garden
@@ -87,19 +90,24 @@ export function initClouds({ getHoldDistance = () => 0 } = {}) {
       : heroHeight * .32;
     landingSkyHeight = Math.max(0, Math.min(heroHeight * .34, statementTop - 20));
     for (const cloud of clouds) measureCloud(cloud);
-    for (const cloud of clouds) {
-      if (cloud.windX !== null) cloud.windX *= width / previousWidth;
-    }
-    const ordered = clouds.filter(cloud => !cloud.failed)
-      .sort((a, b) => (a.windX ?? Infinity) - (b.windX ?? Infinity));
-    for (let index = 0; index < ordered.length; index++) {
-      const cloud = ordered[index];
-      const previous = ordered[index - 1];
-      const minimumX = previous
-        ? previous.windX + previous.width / 2 + gapBetween(previous, cloud) + cloud.width / 2
-        : width * .10;
-      if (cloud.windX === null) cloud.windX = minimumX;
-      else if (previous) cloud.windX = Math.max(cloud.windX, minimumX);
+    const widthScale = width / previousWidth;
+    for (let index = 0; index < previousClouds.length; index++) {
+      const before = previousClouds[index];
+      const { cloud } = before;
+      if (before.windX !== null && width === previousWidth) continue;
+      const previous = previousClouds[index - 1];
+      if (!previous) {
+        cloud.windX = before.windX === null ? width * .10 : before.windX * widthScale;
+        continue;
+      }
+      // Rebuild spacing around the leading cloud. Scaling centers and only
+      // pushing neighbors apart would grow the queue on every narrow/wide cycle
+      // because cloud artwork keeps a minimum size on small screens.
+      const extraGap = before.windX === null || previous.windX === null ? 0
+        : Math.max(0, before.windX - previous.windX - (before.width + previous.width) / 2
+          - gapBetween(previous, before)) * widthScale;
+      cloud.windX = previous.cloud.windX + (previous.cloud.width + cloud.width) / 2
+        + gapBetween(previous.cloud, cloud) + extraGap;
     }
   }
 

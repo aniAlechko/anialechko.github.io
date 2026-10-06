@@ -15,7 +15,7 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
   let nativeWheelUntil = 0;
   let lastWheelTime = 0;
   let strength = 0;
-  let responseTime = 90;
+  let responseTime = 180;
   let route;
   let resizeFrame = 0;
   let resizePending = false;
@@ -87,13 +87,6 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
       stop();
       return;
     }
-    const scroll = window.scrollY;
-    const activeTarget = frame ? target : scroll;
-    // Rung easing belongs to the descent; the lower sections scroll natively.
-    if (route && scroll > route.total && activeTarget > route.total) {
-      stop();
-      return;
-    }
     const now = performance.now();
     const sign = Math.sign(event.deltaY);
     // Touchpads already provide momentum. Keep their continuous gestures native.
@@ -110,20 +103,23 @@ export function initSmoothScroll({ onInteraction = () => {} } = {}) {
     const maximum = maxScroll();
     if (!maximum) return;
     const interval = now - lastWheelTime;
-    const continuing = frame && direction === sign && interval < 220;
+    const reversing = direction && direction !== sign;
+    const continuing = frame && direction === sign && interval < 340;
     strength = continuing
-      ? Math.min(1, strength * Math.exp(-interval / 260) + Math.abs(delta) / 480)
+      ? Math.min(1, strength * Math.exp(-interval / 400) + Math.abs(delta) / 480)
       : Math.min(1, Math.abs(delta) / 700);
-    responseTime = 105 - 35 * strength;
+    // Let successive wheel clicks share a soft coast throughout the page.
+    // Reversing drops the old destination and responds more quickly.
+    responseTime = reversing ? 120 : 180 + 35 * strength;
     lastWheelTime = now;
-    if (!frame || (direction && direction !== sign)) {
+    if (!frame || reversing) {
       position = target = ownScroll = window.scrollY;
     }
     // Strong bursts build speed and leave a few rungs of momentum, without
     // accumulating a long queue after the user releases the wheel.
     const onLadder = route && ((position >= 0 && position <= route.total)
       || (target >= 0 && target <= route.total));
-    const lead = onLadder ? route.pitch * (3 + 3 * strength) : window.innerHeight * 0.4;
+    const lead = onLadder ? route.pitch * (4 + 4 * strength) : window.innerHeight * 0.55;
     const requested = target + delta * (1 + 0.9 * strength);
     const destination = restingTarget(Math.max(position - lead, Math.min(position + lead, requested)), sign);
     if (!frame && Math.abs(destination - position) < 0.4) return;

@@ -12,9 +12,12 @@ const blendBox = (first, last, xProgress, yProgress = xProgress) => box(
 const defaultMetrics = {
   nameWidths: [2.662, 3.398], introWidths: [9.414, 8.294], statusWidths: [9.363, 10.956],
 };
+const compactWidth = 809;
+const portraitWidth = 500;
+const portraitRatio = 1.2;
 const getMode = (width, height) => ({
-  progress: width <= 500 || (width <= 809 && width / height <= 1.2) ? 1 : 0,
-  sideProgress: width <= 809 ? 1 : 0,
+  progress: width <= portraitWidth || (width <= compactWidth && width / height <= portraitRatio) ? 1 : 0,
+  sideProgress: width <= compactWidth ? 1 : 0,
 });
 
 // Resting layouts are complete. Fractional modes exist only during a timed transition.
@@ -25,22 +28,26 @@ export function getHeroLayout({ width, height, metrics = defaultMetrics,
   const smallDetails = 1 - (1 - compact) * (1 - short);
   const edge = mix(clamp(width * .0167, 16, 32), 16, progress);
   const stageGap = clamp(width * .02, 16, 36);
-  const wideCharacter = mix(clamp(Math.min(width * .23, height * .38), 150, 360),
-    clamp(height - 210, 104, 190), short);
-  const availableName = (width - 2 * edge - wideCharacter * 444 / 1180 - 2 * stageGap) / 6.06;
-  const wideName = Math.min(mix(availableName, Math.min(availableName, height * .42), short),
-    (wideCharacter + 16) / .86);
-  const portraitName = Math.min((width - 32) / 3.4, height * .14, 160);
   const portraitSpeech = clamp(height * .29, 212, 238);
   const portraitDetails = clamp(height * .02, 14, 17);
   const compositionGap = clamp(height * .03, 16, 24);
   const footerGap = clamp(height * .03, 16, 28);
   const breathingRoom = clamp((height - 500) * .07, 0, 24);
   const copyRows = metrics.introWidths.length + metrics.statusWidths.length;
-  const portraitCharacter = clamp(height - 84 - 1.72 * portraitName - compositionGap
-    - portraitSpeech / 3.2 - 8 - footerGap - copyRows * 1.12 * portraitDetails - 8 - breathingRoom, 104, 250);
-  const characterHeight = mix(wideCharacter, portraitCharacter, progress);
+  const portraitChrome = 84 + compositionGap + portraitSpeech / 3.2 + 8
+    + footerGap + copyRows * 1.12 * portraitDetails + 8 + breathingRoom;
+  // Size the character once for both compositions. Its ladder shares this scale;
+  // switching rows must never make either grow as the viewport gets narrower.
+  const referenceName = Math.min(height * .14, 160);
+  const baseCharacter = clamp(height - portraitChrome - 1.72 * referenceName, 104, 250);
+  const portraitLimit = clamp(height * portraitRatio, portraitWidth, compactWidth);
+  const characterHeight = Math.min(baseCharacter + Math.max(0, width - portraitLimit) * .16,
+    clamp(height * .38, 104, 360));
   const characterWidth = characterHeight * 444 / 1180;
+  const availableName = (width - 2 * edge - characterWidth - 2 * stageGap) / 6.06;
+  const wideName = Math.min(mix(availableName, Math.min(availableName, height * .42), short),
+    (characterHeight + 16) / .86);
+  const portraitName = Math.min((width - 32) / 3.4, referenceName);
   const speechWidth = mix(mix(clamp(width * .22, 230, 320), 212, smallDetails), portraitSpeech, progress);
   const detailSize = mix(mix(20, 15, smallDetails), portraitDetails, progress);
   const detailLineHeight = mix(1.2, 1.12, progress);
@@ -111,6 +118,7 @@ export function getHeroLayout({ width, height, metrics = defaultMetrics,
 export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
   const hero = document.querySelector('.hero');
   if (!hero) return { subscribe: () => () => {}, cleanup() {} };
+  const journey = hero.closest?.('.journey') || hero;
   const names = [...hero.querySelectorAll('.name-position')];
   const character = hero.querySelector('.character-position');
   const speech = hero.querySelector('.speech');
@@ -207,6 +215,10 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     hero.style.setProperty('--hero-viewport-height', pixels(size.height));
     hero.style.setProperty('--character-height', pixels(layout.character.height));
     hero.style.setProperty('--character-width', pixels(layout.character.width));
+    // The static garden uses the same avatar scale and axis as the hero.
+    journey.style.setProperty('--character-height', pixels(layout.character.height));
+    journey.style.setProperty('--character-width', pixels(layout.character.width));
+    journey.style.setProperty('--hero-axis', pixels(layout.character.left + layout.character.width / 2));
     hero.style.setProperty('--layout-name-size', pixels(layout.nameSize));
     hero.style.setProperty('--layout-details-size', pixels(layout.detailSize));
     hero.style.setProperty('--layout-details-line-height', layout.detailLineHeight);

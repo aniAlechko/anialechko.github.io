@@ -129,7 +129,6 @@ try {
       garden?.setRoute(route);
       fishing?.setRoute(route);
       clouds?.setRoute(route);
-      smoothScroll?.setRoute(route);
     },
     getScrollTarget: () => smoothScroll?.getTarget() ?? null,
   });

@@ -18,8 +18,8 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
   let lastLineVisible;
   let lastPose;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const transitionDuration = 220;
-  const lineDuration = 520;
+  const transitionDuration = 180;
+  const lineDuration = 360;
   const poses = ['standing', 'reach', 'ready', 'cast', 'idle'];
   const rodTips = {
     idle: { x: 975.25, y: 113.25 },
@@ -31,8 +31,6 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
   let lineProgress = 0;
   let lastTime = null;
   let pullReady = false;
-  let pullFailed = !pullImage;
-  let pullPreparedAt = null;
   let spriteUnit = 0;
   let lastLineHeight;
 
@@ -60,7 +58,6 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
     if (spritePose !== lastPose) {
       fishing.dataset.pose = spritePose;
       lastPose = spritePose;
-      pullPreparedAt = spritePose === 'pull' ? performance.now() : null;
       const tip = rodTips[spritePose] || rodTips.idle;
       actor.style.setProperty('--fishing-tip-x', String(tip.x));
       actor.style.setProperty('--fishing-tip-y', String(tip.y));
@@ -158,10 +155,12 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
       animateLine(target === 4 ? 1 : 0, elapsed);
     }
     if (!transition && stage !== target && lineProgress === 0 && !lineAnimation) {
-      const next = stage + Math.sign(target - stage) * 2;
+      // Follow the latest scroll position instead of queueing every resting
+      // pose after a fast swipe. Reach and cast remain short moving poses.
+      const low = target > stage ? target - 2 : target;
       transition = {
-        low: Math.min(stage, next), high: Math.max(stage, next),
-        to: next, elapsed: 0,
+        low, high: low + 2,
+        to: target, elapsed: 0,
       };
     }
     const pulling = !transition && stage === 4 && target === 4 && lineProgress === 1
@@ -221,7 +220,7 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
       schedule();
     }).catch(() => {
       if (disposed) return;
-      pullFailed = true;
+      // The ordinary fishing pose remains usable if the optional pull art fails.
       schedule();
     });
   }
@@ -231,11 +230,10 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
       const range = getPullRange();
       // Loading is a closed gate, not permission to skip the sequence. An
       // actual asset failure releases it so the page remains reachable.
-      if (disposed || failed || pullFailed || reducedMotion.matches || !range) return null;
+      if (disposed || failed || reducedMotion.matches || !range) return null;
       return {
         ...range,
-        ready: ready && pullReady && stage === 4 && lineProgress === 1 && !transition && pullPreparedAt !== null
-          && performance.now() - pullPreparedAt >= 180,
+        ready: ready && stage === 4 && lineProgress === 1 && !transition,
       };
     },
     setRoute(nextRoute) {

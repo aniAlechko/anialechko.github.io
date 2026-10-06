@@ -24,8 +24,6 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
   let transition = null;
   let lineAnimation = null;
   let lineProgress = 0;
-  let scrollDirection = 1;
-  let lastScroll = window.scrollY;
   let lastTime = null;
 
   function setLineProgress(progress) {
@@ -109,7 +107,7 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
       stage = target;
       transition = null;
       lineAnimation = null;
-      lineProgress = stage === 4 && scrollDirection > 0 ? 1 : 0;
+      lineProgress = stage === 4 ? 1 : 0;
       setLineProgress(lineProgress);
       showPose(poses[stage]);
       lastTime = null;
@@ -126,10 +124,10 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
       }
     }
 
-    // Finish retracting before changing the rod pose. The target persists when
-    // scrolling stops, so the line always completes its time-based movement.
+    // Keep the line extended throughout the fishing stage. Retract only when
+    // leaving it, and finish retracting before changing the rod pose.
     if (!transition && stage === 4) {
-      animateLine(target === 4 && scrollDirection > 0 ? 1 : 0, elapsed);
+      animateLine(target === 4 ? 1 : 0, elapsed);
     }
     if (!transition && stage !== target && lineProgress === 0 && !lineAnimation) {
       const next = stage + Math.sign(target - stage) * 2;
@@ -145,21 +143,6 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
 
   function schedule() {
     if (!disposed && !document.hidden && !frame) frame = requestAnimationFrame(render);
-  }
-
-  function onScroll() {
-    const scroll = window.scrollY;
-    const delta = scroll - lastScroll;
-    if (Math.abs(delta) >= 1) {
-      scrollDirection = Math.sign(delta);
-      lastScroll = scroll;
-    }
-    schedule();
-  }
-
-  function onResize() {
-    lastScroll = window.scrollY;
-    schedule();
   }
 
   function visibilityChanged() {
@@ -188,8 +171,8 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
     render();
   });
   observer.observe(scene, { attributes: true, attributeFilter: ['data-state'] });
-  window.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', onResize, { passive: true });
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule, { passive: true });
   reducedMotion.addEventListener('change', schedule);
   document.addEventListener('visibilitychange', visibilityChanged);
   image.addEventListener('error', imageFailed);
@@ -204,7 +187,6 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
     setRoute(nextRoute) {
       if (disposed) return;
       route = Number.isFinite(nextRoute?.total) && nextRoute.total > 0 ? nextRoute : null;
-      lastScroll = window.scrollY;
       cancelAnimationFrame(frame);
       frame = 0;
       if (!route) reset();
@@ -216,8 +198,8 @@ export function initFishing({ getHoldDistance = () => 0 } = {}) {
       cancelAnimationFrame(frame);
       frame = 0;
       observer.disconnect();
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
       reducedMotion.removeEventListener('change', schedule);
       document.removeEventListener('visibilitychange', visibilityChanged);
       image.removeEventListener('error', imageFailed);

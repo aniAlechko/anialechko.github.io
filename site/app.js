@@ -76,7 +76,6 @@ let fishing;
 try {
   smoothScroll = initSmoothScroll({
     onInteraction: skipIntro,
-    getPullMotion: () => fishing?.getPullMotion?.() ?? null,
   });
 } catch (error) {
   console.warn('Scroll easing unavailable; native scrolling remains usable.', error);

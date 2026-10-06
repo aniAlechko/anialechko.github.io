@@ -33,7 +33,6 @@
 
 * { box-sizing: border-box; }
 html { scrollbar-width: none; }
-html.is-fishing-scroll-held { overflow-y: hidden; scrollbar-gutter: stable; }
 html, body { overscroll-behavior-y: none; }
 html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }
 body { position: relative; margin: 0; }

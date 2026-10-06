@@ -226,16 +226,6 @@ export function initFishing({ getHoldDistance = () => 0, getPullRange = () => nu
   }
 
   return {
-    getPullMotion() {
-      const range = getPullRange();
-      // Loading is a closed gate, not permission to skip the sequence. An
-      // actual asset failure releases it so the page remains reachable.
-      if (disposed || failed || reducedMotion.matches || !range) return null;
-      return {
-        ...range,
-        ready: ready && stage === 4 && lineProgress === 1 && !transition,
-      };
-    },
     setRoute(nextRoute) {
       if (disposed) return;
       route = Number.isFinite(nextRoute?.total) && nextRoute.total > 0 ? nextRoute : null;

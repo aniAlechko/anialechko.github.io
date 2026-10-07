@@ -134,7 +134,6 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
   let metrics = defaultMetrics;
   let layout;
   let lastCommit;
-  let entryPrepared = false;
   let disposed = false;
   let mode;
   let transition;
@@ -230,14 +229,6 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     hero.style.setProperty('--layout-name-size', pixels(layout.nameSize));
     hero.style.setProperty('--layout-details-size', pixels(layout.detailSize));
     hero.style.setProperty('--layout-details-line-height', layout.detailLineHeight);
-    if (!entryPrepared) {
-      entryPrepared = true;
-      hero.style.setProperty('--name-entry-distance', pixels(mix(150, 10, layout.progress)));
-      hero.style.setProperty('--given-entry-delay', `${mix(1.2, 1, layout.progress)}s`);
-      hero.style.setProperty('--family-entry-delay', `${mix(1.6, 1.075, layout.progress)}s`);
-      hero.style.setProperty('--given-entry-easing', `cubic-bezier(${mix(.5, .22, layout.progress)}, ${layout.progress}, ${mix(.88, .36, layout.progress)}, ${mix(.77, 1, layout.progress)})`);
-      hero.style.setProperty('--family-entry-easing', `cubic-bezier(${mix(0, .22, layout.progress)}, ${mix(.72, 1, layout.progress)}, ${mix(.56, .36, layout.progress)}, 1)`);
-    }
     names.forEach((element, index) => place(element, layout.names[index]));
     place(character, layout.character);
     place(speech, { ...layout.speech, left: layout.speech.left - layout.character.left,

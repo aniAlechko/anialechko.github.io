@@ -12,14 +12,6 @@ import { initFooterDetails } from './footer-details.js';
 const page = document.documentElement;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
-function waitForAssets(promise, milliseconds) {
-  let timer;
-  return Promise.race([
-    promise,
-    new Promise(resolve => { timer = setTimeout(resolve, milliseconds); }),
-  ]).finally(() => clearTimeout(timer));
-}
-
 const fontsReady = Promise.allSettled([
   document.fonts.load('700 100px "Neue Montreal Display"'),
   document.fonts.load('700 20px "Neue Montreal"'),
@@ -136,7 +128,7 @@ try {
 }
 let enterBackground = () => {};
 const backgroundReady = import('./background.js').then(async ({ initBackground }) => {
-  enterBackground = await initBackground(waitForAssets(fontsReady, 1800), {
+  enterBackground = await initBackground(fontsReady, {
     subscribeLayout: responsiveLayout.subscribe,
   });
   // A late renderer joins the settled page without replaying the entrance.
@@ -150,16 +142,15 @@ scrollIndicator?.setAttribute('aria-label', 'Loading portfolio');
 const sceneImagesReady = Promise.allSettled(
   [...document.querySelectorAll('.journey img')].map(image => image.decode()),
 );
-void waitForAssets(Promise.allSettled([
+void Promise.allSettled([
   fontsReady, backgroundReady, characterReady, sceneImagesReady,
-]), 10000).then(() => {
+]).then(() => {
   page.classList.remove('is-loading');
   scrollIndicator?.setAttribute('aria-label', 'Scroll down');
 });
 
-await waitForAssets(Promise.all([
-  fontsReady, waitForAssets(backgroundReady, 1800), characterReady,
-]), 2000);
+// Start the entrance after its actual assets settle, regardless of connection speed.
+await Promise.allSettled([fontsReady, backgroundReady, characterReady]);
 
 if (jumpReady) page.classList.add('has-jump-pose');
 if (introFinished || reducedMotion.matches || page.classList.contains('is-ready')) skipIntro();

@@ -303,9 +303,6 @@ a:hover { color: #efee74; }
   .status { text-align: center; }
   .hero-intro { width: 100%; }
   .scroll-indicator { width: 16px; height: 16px; bottom: 8px; }
-  .is-entering .given-name .name-word { animation: mobile-name-enter .4s cubic-bezier(.22, 1, .36, 1) 1s both; }
-  .is-entering .family-name .name-word { animation: mobile-name-enter .4s cubic-bezier(.22, 1, .36, 1) 1.075s both; }
-  @keyframes mobile-name-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 }
 
 @media (max-width: 809px) and (max-aspect-ratio: 6/5) and (max-height: 650px) {
@@ -358,17 +355,6 @@ a:hover { color: #efee74; }
 .hero.layout-managed .hero-details p { position: absolute; text-align: left; }
 .hero.layout-managed .intro-row, .hero.layout-managed .status-row { width: max-content; }
 .hero.layout-managed .scroll-indicator { bottom: auto; transform: none; }
-.is-entering .hero.layout-managed .given-name .name-word {
-  animation: responsive-name-enter .4s var(--given-entry-easing) var(--given-entry-delay) both;
-}
-.is-entering .hero.layout-managed .family-name .name-word {
-  animation: responsive-name-enter .4s var(--family-entry-easing) var(--family-entry-delay) both;
-}
-@keyframes responsive-name-enter {
-  from { opacity: 0; transform: translateY(var(--name-entry-distance)); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 /* Keep the entire character journey outside the contact section. */
 .journey { position: relative; isolation: isolate; overflow: clip; }
 #descent-stage { position: relative; height: 0; pointer-events: none; }

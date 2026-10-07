@@ -12,15 +12,15 @@
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     document.documentElement.classList.add('js', 'is-loading');
-    window.setTimeout(() => {
-      if (!document.documentElement.classList.contains('is-ready')) {
-        document.documentElement.classList.add('is-ready', 'skip-intro');
-      }
-    }, 4000);
-    window.setTimeout(() => {
+    // Recover only from a failed app module; slow downloads keep their entrance.
+    window.addEventListener('error', async event => {
+      if (!event.target?.matches?.('script[type="module"]')) return;
+      await document.fonts.ready;
+      if (document.documentElement.classList.contains('is-ready')) return;
+      document.documentElement.classList.add('is-ready', 'is-entering', 'character-landed');
       document.documentElement.classList.remove('is-loading');
       document.querySelector('.scroll-indicator')?.setAttribute('aria-label', 'Scroll down');
-    }, 12000);
+    }, true);
   </script>
   <link rel="preload" href="/fonts/PPNeueMontrealTT-Bold.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PPNeueMontreal-Bold.woff2" as="font" type="font/woff2" crossorigin />

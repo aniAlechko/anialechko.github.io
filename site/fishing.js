@@ -109,36 +109,16 @@ export function initFishing({ getFishingDistance = () => 0, getPullRange = () =>
     const distance = getFishingDistance();
     const scroll = window.scrollY;
     const pullRange = getPullRange();
-    if (!ready || failed || !route
+    if (!ready || failed || !route || scene.dataset.state !== 'landed'
       || !Number.isFinite(distance) || distance <= 0 || !Number.isFinite(scroll)) {
       reset();
       return;
     }
-    const waterEntry = Number.isFinite(pullRange?.end)
-      ? pullRange.end - window.innerHeight - 1 : null;
-    // Water entering the viewport is the deadline for the cast. Catch up to
-    // the finished pose immediately rather than holding back page momentum.
-    if (waterEntry !== null && scroll >= waterEntry) {
-      stage = 4;
-      transition = null;
-      lineAnimation = null;
-      lineProgress = 1;
-      setLineProgress(1);
-      showPose('idle');
-      positionRig(scroll, pullRange);
-      lastTime = null;
-      return;
-    }
-    if (scene.dataset.state !== 'landed') {
-      reset();
-      return;
-    }
-    // Prepare in the space before the water enters, not inside the footer.
-    // Reach and cast stay short timed intermediates between resting poses.
-    const preparationDistance = waterEntry === null
-      ? distance : Math.max(0, waterEntry - route.total);
-    const target = scroll < route.total + preparationDistance * .10 ? 0
-      : scroll < route.total + preparationDistance * .25 ? 2 : 4;
+    // Scroll selects resting poses; reach and cast are timed intermediates.
+    // Fit the poses into the visible landscape rather than reserving page
+    // distance for them. A fast scroll can always leave the scene immediately.
+    const target = scroll < route.total + distance * .10 ? 0
+      : scroll < route.total + distance * .25 ? 2 : 4;
     const now = performance.now();
     const elapsed = lastTime === null ? 0 : Math.min(64, Math.max(0, now - lastTime));
     lastTime = now;

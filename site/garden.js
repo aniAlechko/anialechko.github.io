@@ -6,8 +6,11 @@ export function initGarden() {
   const journey = document.querySelector('.journey');
   const hero = document.querySelector('.hero');
   if (!garden || !daylight || !journey || !hero) return { setRoute() {}, cleanup() {} };
-  const statement = garden.querySelector('.garden-statement');
   const landing = document.querySelector('#landing');
+  const trail = garden.querySelector('.garden-trail');
+  const trailSvg = trail?.querySelector('svg');
+  const trailPaths = [...trail?.querySelectorAll('path') || []];
+  const trailPlants = trail?.querySelector('.garden-trail-plants');
   const rabbits = initGardenRabbits(garden);
 
   let route;
@@ -19,6 +22,35 @@ export function initGarden() {
   let fishingDistance = 0;
   let pullDistance = 0;
   let lastTop;
+
+  function layoutTrail(heroHeight) {
+    if (!trail || !trailSvg || !trailPlants) return;
+    if (!route?.walkPath) {
+      trail.hidden = true;
+      return;
+    }
+    trail.hidden = false;
+    const width = window.innerWidth;
+    const pathWidth = route.actorWidth * 1.25;
+    const footY = route.total - heroHeight + route.landingTop + route.actorHeight;
+    trail.style.top = `${footY}px`;
+    trail.style.height = `${route.walkDistance}px`;
+    trail.style.setProperty('--trail-width', `${pathWidth}px`);
+    trailSvg.setAttribute('viewBox', `0 0 ${width} ${route.walkDistance}`);
+    for (const path of trailPaths) path.setAttribute('d', route.walkPath.pathData());
+    trailPlants.replaceChildren();
+    for (let index = 0; index < 14; index++) {
+      const point = route.walkPath.sample((index + .5) / 14);
+      const plant = document.createElement('i');
+      plant.className = index % 3 ? 'garden-grass' : 'garden-flower';
+      const side = index % 2 ? 1 : -1;
+      const x = Math.max(20, Math.min(width - 36, point.x + side * (pathWidth / 2 + 30 + index % 3 * 16)));
+      plant.style.left = `${x}px`;
+      plant.style.top = `${point.y}px`;
+      plant.style.setProperty('--bloom', index % 2 ? '#a62b38' : '#d6a232');
+      trailPlants.append(plant);
+    }
+  }
 
   function render() {
     frame = 0;
@@ -38,29 +70,22 @@ export function initGarden() {
     const heroHeight = route?.heroHeight || hero.getBoundingClientRect().height;
     gardenHeight = Math.max(heroHeight, route?.sceneHeight || route?.arrivalBottom || 0);
     fishingDistance = route?.fishingDistance || 0;
-    pullDistance = route && landing
-      ? Math.max(0, heroHeight + route.sceneHeight - route.total) : 0;
+    pullDistance = route && landing ? fishingDistance : 0;
     garden.style.height = `${gardenHeight}px`;
     garden.style.top = route ? `${heroHeight}px` : '0px';
-    if (statement) {
-      if (route && Number.isFinite(route.landingTop)) {
-        const viewportHeight = route.viewportHeight || heroHeight;
-        const halfTextHeight = statement.getBoundingClientRect().height / 2;
-        const center = Math.max(64 + halfTextHeight,
-          Math.min(viewportHeight * .40, route.landingTop - 24 - halfTextHeight));
-        // Position the copy within the final viewport after the extra descent,
-        // while leaving room above the character's head.
-        statement.style.top = `${route.total - heroHeight + center}px`;
-        const textTop = center - halfTextHeight;
-        const mountainsHeight = Math.max(18, Math.min(72, viewportHeight * .095, textTop - 76));
-        const mountainsTop = Math.max(50, Math.min(viewportHeight * .085, textTop - mountainsHeight - 28));
-        garden.style.setProperty('--mountains-top', `${route.total - heroHeight + mountainsTop}px`);
-        garden.style.setProperty('--mountains-height', `${mountainsHeight}px`);
-      } else {
-        statement.style.removeProperty('top');
-        garden.style.removeProperty('--mountains-top');
-        garden.style.removeProperty('--mountains-height');
-      }
+    garden.style.setProperty('--arrival-height', `${fishingDistance || heroHeight}px`);
+    layoutTrail(heroHeight);
+    if (route) {
+      const viewportHeight = route.viewportHeight || heroHeight;
+      const mountainsHeight = Math.max(18, Math.min(72, viewportHeight * .095));
+      // Landscape spacing stays independent of the shorter ladder route.
+      const skyPadding = Math.max(96, Math.min(200, viewportHeight * .20));
+      const mountainsTop = skyPadding + Math.max(50, viewportHeight * .085) + viewportHeight * .08;
+      garden.style.setProperty('--mountains-top', `${mountainsTop}px`);
+      garden.style.setProperty('--mountains-height', `${mountainsHeight}px`);
+    } else {
+      garden.style.removeProperty('--mountains-top');
+      garden.style.removeProperty('--mountains-height');
     }
     gardenTop = route ? heroHeight : garden.getBoundingClientRect().top + window.scrollY;
     const top = `${gardenTop.toFixed(2)}px`;
@@ -85,14 +110,15 @@ export function initGarden() {
   return {
     getFishingDistance: () => disposed ? 0 : fishingDistance,
     getPullRange: () => !disposed && route && pullDistance > 0 ? {
-      start: route.total,
-      end: route.total + pullDistance,
+      start: route.fishingStart ?? route.total,
+      end: (route.fishingStart ?? route.total) + pullDistance,
     } : null,
     setRoute(nextRoute) {
       if (disposed) return;
       route = Number.isFinite(nextRoute?.total) && nextRoute.total > 0 ? nextRoute : null;
       ready = true;
       journey.classList.toggle('has-static-garden', !route);
+      journey.classList.toggle('has-walking-garden', !!route?.walkPath);
       garden.hidden = false;
       daylight.hidden = false;
       measure();
@@ -107,8 +133,9 @@ export function initGarden() {
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', resized);
       document.removeEventListener('visibilitychange', schedule);
-      journey.classList.remove('has-static-garden');
-      statement?.style.removeProperty('top');
+      journey.classList.remove('has-static-garden', 'has-walking-garden');
+      garden.style.removeProperty('--arrival-height');
+      trailPlants?.replaceChildren();
       garden.style.removeProperty('--mountains-top');
       garden.style.removeProperty('--mountains-height');
       garden.hidden = true;

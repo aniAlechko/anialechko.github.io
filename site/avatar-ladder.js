@@ -1,3 +1,9 @@
+import { createWalkingPath } from './walking-path.js';
+import { CHARACTER_GEOMETRY, setCharacterFrame } from './character-family.js';
+
+// Retain the ladder's rung spacing while using native character-art units.
+const ladderScale = CHARACTER_GEOMETRY.height / 1180;
+
 let currentCleanup;
 
 export function initDescent({
@@ -19,6 +25,8 @@ export function initDescent({
   const strip = scene?.querySelector('.descent-ladder-strip');
   const actor = scene?.querySelector('.descent-actor');
   const turnElement = scene?.querySelector('.descent-turn');
+  const walking = scene?.querySelector('.walking-actor');
+  const walkImages = [...scene?.querySelectorAll('.walking-sprite-source') || []];
   const probe = scene?.querySelector('.descent-ladder-probe');
   const poses = Object.fromEntries([...scene?.querySelectorAll('.descent-image') || []]
     .map(image => [image.dataset.pose, image]));
@@ -29,6 +37,7 @@ export function initDescent({
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   let disposed = false;
   let assetsReady = false;
+  let walkingReady = false;
   let geometry;
   let frame = 0;
   let deploymentFrame = 0;
@@ -37,6 +46,11 @@ export function initDescent({
   let active = false;
   let travel = 0;
   let renderedTravel = null;
+  let horizontalTravel = 0;
+  let renderedHorizontal = null;
+  let renderedWalkFrame;
+  let lastWalkDirection = 1;
+  let walkDirectionAnchor = 0;
   let lastScroll = Math.max(0, window.scrollY);
   let turnAnimation;
   let turnDestination = null;
@@ -62,18 +76,52 @@ export function initDescent({
   }
 
   function moveActor() {
-    if (renderedTravel === travel) return;
+    if (renderedTravel === travel && renderedHorizontal === horizontalTravel) return;
     // Keep layout coordinates stable while scrolling; only composite the travel.
-    actor.style.transform = `translate3d(0, ${travel}px, 0)`;
+    actor.style.transform = `translate3d(${horizontalTravel}px, ${travel}px, 0)`;
     renderedTravel = travel;
+    renderedHorizontal = horizontalTravel;
   }
 
   function actorTravel(scroll) {
     const progress = clamp(scroll / geometry.total, 0, 1);
     const dropProgress = progress * progress * (3 - 2 * progress);
-    // Land at a fixed point in the landscape. Further scrolling carries the
-    // character and its surroundings together in normal document flow.
-    return progress * geometry.total + dropProgress * geometry.landingDrop;
+    const walkProgress = clamp((scroll - geometry.total) / geometry.walkDistance, 0, 1);
+    const position = geometry.walkPath.sample(walkProgress);
+    horizontalTravel = position.x - geometry.center;
+    return progress * geometry.total + dropProgress * geometry.landingDrop + position.y;
+  }
+
+  function setWalking(enabled, scroll = 0, direction = lastWalkDirection) {
+    if (!walking) return;
+    enabled = enabled && walkingReady;
+    actor.classList.toggle('is-walking', enabled);
+    walking.hidden = !enabled;
+    if (!enabled) return;
+    lastWalkDirection = direction;
+    const progress = clamp((scroll - geometry.total) / geometry.walkDistance, 0, 1);
+    const position = geometry.walkPath.sample(progress);
+    const stride = geometry.unit * 860 * ladderScale;
+    const phase = Math.floor(position.traveled / stride * 8) % 8;
+    const key = `${direction}:${phase}`;
+    if (key === renderedWalkFrame) return;
+    setCharacterFrame(walking.querySelector('.walking-pose'),
+      `walk-${direction < 0 ? 'back' : 'front'}-${phase + 1}`);
+    walking.dataset.direction = direction < 0 ? 'back' : 'front';
+    walking.dataset.frame = String(phase);
+    renderedWalkFrame = key;
+  }
+
+  function placeAfterLanding(scroll, direction = lastWalkDirection) {
+    if (!active) activate(false);
+    cancelTurn();
+    setReturnReady(false);
+    setLanded(true);
+    settledEndpoint = 'bottom';
+    setPose('front');
+    const isWalking = scroll < geometry.walkingEnd - .5;
+    setWalking(isWalking, scroll, direction);
+    setState(isWalking ? 'walking' : 'landed');
   }
 
   function cancelSpeechReplay() {
@@ -108,7 +156,7 @@ export function initDescent({
 
   function setPose(name) {
     if (renderedPose === name) return;
-    for (const [pose, image] of Object.entries(poses)) image.hidden = pose !== name;
+    for (const [pose, image] of Object.entries(poses)) image.parentElement.hidden = pose !== name;
     actor.dataset.pose = name;
     renderedPose = name;
   }
@@ -135,6 +183,10 @@ export function initDescent({
     active = false;
     settledEndpoint = null;
     travel = 0;
+    horizontalTravel = 0;
+    walkDirectionAnchor = 0;
+    lastWalkDirection = 1;
+    setWalking(false);
     scene.hidden = true;
     scene.classList.remove('is-active');
     setLanded(false);
@@ -161,27 +213,27 @@ export function initDescent({
     const bounds = original.getBoundingClientRect();
     const heroHeight = hero.getBoundingClientRect().height;
     if (bounds.height <= 0 || heroHeight <= 0) throw new Error('Avatar has no measurable size.');
-    const unit = bounds.height / 1180;
+    const unit = bounds.height / CHARACTER_GEOMETRY.height;
     const center = bounds.left + bounds.width / 2;
     // Keep fractional layout coordinates, excluding only the entrance jump.
     // offsetTop rounds the mobile flex position and causes a handoff shift.
     const transform = getComputedStyle(original).transform;
     const jumpOffset = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
     const top = bounds.top + window.scrollY - jumpOffset;
-    const pitch = 224 * unit;
+    const pitch = 224 * ladderScale * unit;
     const heroStyle = getComputedStyle(hero);
     const stableHeight = parseFloat(heroStyle.getPropertyValue('--hero-viewport-height'))
       || parseFloat(heroStyle.minHeight) || heroHeight;
-    const actorHeight = 1249 * unit;
+    const actorHeight = CHARACTER_GEOMETRY.height * unit;
     const landingDrop = Math.max(0, stableHeight - clamp(stableHeight * .01, 6, 12) - actorHeight - top);
     const arrivalBottom = top + landingDrop + actorHeight + 16;
-    const descentDepth = clamp(stableHeight * .20, 96, 200);
+    const descentDepth = clamp(stableHeight * .04, 24, 48);
     const tolerance = typeof subscribeLayout === 'function' ? .01 : .5;
     // A browser-toolbar resize is not a new layout. Keep the current pose,
     // ladder nodes, and arrival animation when the page itself has not moved.
     if (geometry && geometry.width === window.innerWidth
       && Math.abs(geometry.heroHeight - heroHeight) < tolerance
-      && Math.abs(geometry.unit * 1180 - bounds.height) < tolerance
+      && Math.abs(geometry.unit * CHARACTER_GEOMETRY.height - bounds.height) < tolerance
       && Math.abs(geometry.center - center) < tolerance
       && Math.abs(geometry.arrivalBottom - arrivalBottom) < tolerance
       && Math.abs(geometry.viewportHeight - stableHeight) < tolerance
@@ -193,23 +245,28 @@ export function initDescent({
       snapNext = true;
     }
     // Continue below the cloud bank before the character lands.
-    const total = heroHeight + descentDepth;
+    const total = heroHeight * .8 + descentDepth;
+    const walkDistance = stableHeight * 1.8;
+    const walkingEnd = total + walkDistance;
+    const walkPath = createWalkingPath({ width: window.innerWidth, center,
+      viewportHeight: stableHeight, distance: walkDistance });
     const steps = Math.max(1, Math.ceil((total + landingDrop) / pitch));
-    const xUnit = unit * 380 / 299;
-    const yUnit = unit * 224 / 217;
-    const foot = top + 1242 * unit;
-    const ladderTop = foot - (Math.ceil(1242 / 224) + 1) * pitch - 108 * yUnit;
+    const xUnit = unit * ladderScale * 380 / 299;
+    const yUnit = unit * ladderScale * 224 / 217;
+    const foot = top + actorHeight;
+    const ladderTop = foot - (Math.ceil(actorHeight / pitch) + 1) * pitch - 108 * yUnit;
     const ladderEnd = total + arrivalBottom;
     const tileCount = Math.ceil((ladderEnd - ladderTop) / pitch);
     geometry = { unit, pitch, steps, total, top, center, heroHeight, landingDrop,
-      arrivalBottom, viewportHeight: stableHeight, width: window.innerWidth };
+      arrivalBottom, walkDistance, walkingEnd, walkPath,
+      viewportHeight: stableHeight, width: window.innerWidth };
 
     scene.style.setProperty('--sprite-unit', `${unit}px`);
     scene.style.setProperty('--ladder-x-unit', `${xUnit}px`);
     scene.style.setProperty('--ladder-y-unit', `${yUnit}px`);
-    // Reserve the arrival landscape only; no extra screen for fishing.
-    stage.style.height = `calc(${total - heroHeight}px + max(100lvh, ${arrivalBottom}px))`;
-    actor.style.left = `${center - 524 * unit / 2}px`;
+    // The ground path adds document space; page input and momentum stay native.
+    stage.style.height = `calc(${total - heroHeight + walkDistance}px + max(100lvh, ${arrivalBottom}px))`;
+    actor.style.left = `${center - CHARACTER_GEOMETRY.actorWidth * unit / 2}px`;
     actor.style.top = `${top}px`;
     moveActor();
     ladder.style.left = `${center - 374 * xUnit / 2}px`;
@@ -238,7 +295,9 @@ export function initDescent({
     const sceneHeight = stage.getBoundingClientRect().height;
     onLayout({ pitch, total, heroHeight, arrivalBottom,
       viewportHeight: stableHeight, landingTop: top + landingDrop,
-      fishingDistance: Math.max(0, heroHeight + sceneHeight - total), sceneHeight });
+      actorHeight, actorWidth: CHARACTER_GEOMETRY.actorWidth * unit, center, walkDistance, walkingEnd,
+      walkPath, fishingStart: walkingEnd,
+      fishingDistance: Math.max(0, heroHeight + sceneHeight - walkingEnd), sceneHeight });
     return true;
   }
 
@@ -251,7 +310,7 @@ export function initDescent({
     settledEndpoint = null;
     setState(state);
     const duration = alreadyFacing ? 80 : 150;
-    const lift = clamp(8 * geometry.unit, 1, 2.5);
+    const lift = clamp(8 * ladderScale * geometry.unit, 1, 2.5);
     // A small weight shift connects the two sprite poses at full width.
     // Compressing the image sideways makes the character look like paper.
     const frames = alreadyFacing || destination === 'top' ? [
@@ -344,6 +403,7 @@ export function initDescent({
   }
 
   function placeActor(step) {
+    setWalking(false);
     setLanded(false);
     setPose(step % 2 ? 'b' : 'a');
     setState('climbing');
@@ -358,7 +418,17 @@ export function initDescent({
 
     // A longer route must not undo a landing without another scroll gesture.
     // Keep its pose/turn while render() updates the responsive coordinates.
-    if (turnDestination === 'bottom' || settledEndpoint === 'bottom') return;
+    if (turnDestination === 'bottom') return;
+    if (settledEndpoint === 'bottom') {
+      setWalking(false);
+      setPose('front');
+      setLanded(true);
+      setState('landed');
+      travel = Math.max(travel, geometry.total + geometry.landingDrop);
+      horizontalTravel = 0;
+      moveActor();
+      return;
+    }
 
     const atBottom = scroll >= bottom - .5;
     const atTop = active && !atBottom && scroll <= Math.min(geometry.pitch * .2, 12)
@@ -403,6 +473,27 @@ export function initDescent({
         || (preserveResizeMode && !reversing && !descending);
       travel = actorTravel(scroll);
       moveActor();
+      if (scroll > bottom + Math.min(12, geometry.unit * 60 * ladderScale)) {
+        if (resizing || remeasured || preserveMode) walkDirectionAnchor = scroll;
+        else if (lastWalkDirection > 0) {
+          walkDirectionAnchor = Math.max(walkDirectionAnchor, scroll);
+          if (scroll < walkDirectionAnchor - 32) {
+            lastWalkDirection = -1;
+            walkDirectionAnchor = scroll;
+          }
+        } else {
+          walkDirectionAnchor = Math.min(walkDirectionAnchor, scroll);
+          if (scroll > walkDirectionAnchor + 32) {
+            lastWalkDirection = 1;
+            walkDirectionAnchor = scroll;
+          }
+        }
+        placeAfterLanding(scroll);
+        preserveResizeMode = false;
+        snapNext = false;
+        return;
+      }
+      setWalking(false);
       if (preserveMode) {
         preserveResizeMode = true;
         reconcileResize(scroll, bottom);
@@ -434,6 +525,7 @@ export function initDescent({
       const holdingBottom = (turnDestination === 'bottom' || settledEndpoint === 'bottom')
         && scroll >= bottom - clamp(geometry.pitch * 0.5, 12, 24);
       if (scroll >= bottom - 0.5 || nearBottom || holdingBottom) {
+        if (renderedState === 'walking') setState('landed');
         if (turnDestination !== 'bottom' && settledEndpoint !== 'bottom') arriveAt('bottom');
         snapNext = false;
         return;
@@ -525,6 +617,17 @@ export function initDescent({
 
   // Slow downloads can finish after the visitor has started scrolling. Keep
   // the reserved route throughout loading, including when an image fails.
+  Promise.all(walkImages.map(async image => {
+    await image.decode();
+    if (!image.naturalWidth) throw new Error('A walking image could not be loaded.');
+  })).then(() => {
+    if (disposed) return;
+    walkingReady = true;
+    schedule();
+  }).catch(error => {
+    if (!disposed) console.warn('Walking sprites unavailable; the standing character follows the path.', error);
+  });
+
   Promise.all([layoutReady, ...[...Object.values(poses), probe].map(async image => {
     await image.decode();
     if (!image.naturalWidth) throw new Error('A descent image could not be loaded.');

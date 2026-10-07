@@ -12,8 +12,6 @@ export function initClouds() {
   const scene = document.querySelector('.cloud-scene');
   if (!scene) return { setRoute() {}, cleanup() {} };
   const descent = document.querySelector('#descent-scene');
-  const garden = document.querySelector('.garden-scene');
-  const statement = document.querySelector('.garden-statement');
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   let total = 0;
   let heroHeight = 0;
@@ -80,11 +78,7 @@ export function initClouds() {
       .map(cloud => ({ cloud, windX: cloud.windX, width: cloud.width }))
       .sort((a, b) => (a.windX ?? Infinity) - (b.windX ?? Infinity));
     width = window.innerWidth;
-    const statementBounds = statement?.getBoundingClientRect();
-    const statementTop = statementBounds?.height > 0 && garden
-      ? statementBounds.top - garden.getBoundingClientRect().top - Math.max(0, total - heroHeight)
-      : heroHeight * .32;
-    landingSkyHeight = Math.max(0, Math.min(heroHeight * .34, statementTop - 20));
+    landingSkyHeight = Math.max(0, heroHeight * .32 - 20);
     for (const cloud of clouds) measureCloud(cloud);
     const widthScale = width / previousWidth;
     for (let index = 0; index < previousClouds.length; index++) {

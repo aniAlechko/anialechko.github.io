@@ -24,7 +24,7 @@
   -webkit-font-smoothing: antialiased;
   --page-edge: clamp(16px, 1.67vw, 32px);
   --character-height: clamp(150px, min(23vw, 38svh), 360px);
-  --character-width: calc(var(--character-height) * 444 / 1180);
+  --character-width: calc(var(--character-height) * 188 / 454);
   --jump-height: clamp(40px, 10svh, 90px);
   --stage-gap: clamp(16px, 2vw, 36px);
   --hero-axis: calc(50% - .367 * var(--name-size));
@@ -119,39 +119,32 @@ a:hover { color: #efee74; }
 }
 
 .character {
+  --character-art-unit: calc(var(--character-height) / 454);
   position: relative;
   width: var(--character-width);
   height: var(--character-height);
 }
-.character-pose {
+.character-frame {
+  /* Native atlas dimensions use one scale for both axes and every pose. */
+  --frame-art-unit: calc(var(--character-art-unit) * var(--frame-scale, 1));
   position: absolute;
-  inset: 0;
   overflow: hidden;
-}
-.character-image {
-  position: absolute;
-  display: block;
-  /* Frame the visible sprite (296, 234, 444, 1180) in the original 1024 x 1536 PNG. */
-  width: 230.630631%;
-  max-width: none;
-  height: auto;
-  left: -66.666667%;
-  top: -19.830508%;
+  left: calc(50% + var(--frame-left) * var(--frame-art-unit));
+  top: calc(100% + var(--frame-top) * var(--frame-art-unit));
+  width: calc(var(--frame-width) * var(--frame-art-unit));
+  height: calc(var(--frame-height) * var(--frame-art-unit));
+  background-repeat: no-repeat;
+  background-size: calc(1536 * var(--frame-art-unit)) calc(1024 * var(--frame-art-unit));
+  background-position: calc(-1 * var(--frame-x) * var(--frame-art-unit)) calc(-1 * var(--frame-y) * var(--frame-art-unit));
   image-rendering: pixelated;
 }
-.character-pose--jump {
-  /* Match the idle head's scale and center; give raised arms their own frame. */
-  inset: 0 auto auto 50%;
-  width: calc(var(--character-height) * 700 / 1180);
-  height: calc(var(--character-height) * 1076 / 1180);
-  transform: translateX(-50%);
-  opacity: 0;
+.character-frame[hidden] { display: none; }
+.character-image, .descent-image, .walking-sprite-source, .fishing-sprite-source {
+  /* Keep image decoding and failure detection attached to the displayed atlas. */
+  display: none;
 }
-.character-pose--jump .character-image {
-  /* Jump sprite frame (168, 192, 700, 1076), also in a 1024 x 1536 PNG. */
-  width: 146.285714%;
-  left: -24%;
-  top: -17.843866%;
+.character-pose--jump {
+  opacity: 0;
 }
 .is-entering.has-jump-pose:not(.character-landed):not(.skip-intro) .character-pose--idle { opacity: 0; }
 .is-entering.has-jump-pose:not(.character-landed):not(.skip-intro) .character-pose--jump { opacity: 1; }
@@ -404,22 +397,15 @@ a:hover { color: #efee74; }
   pointer-events: none;
 }
 .garden-art { position: absolute; z-index: 2; inset: 0; }
-.garden-statement {
-  position: absolute;
-  z-index: 3;
-  top: calc(44% + clamp(0px, (100vw - 600px) * .0533, 16px) - clamp(0px, (700px - 100svh) * .1, 30px));
-  left: 50%;
-  width: min(calc(100% - 2 * clamp(20px, 8px + 2vw, 32px)), 25em);
-  margin: 0;
-  transform: translate(-50%, -50%);
-  font-size: clamp(20px, min(max(clamp(26px, 7.2vw, 34px), 3.8vw), 5.2svh), 54px);
-  line-height: 1.1;
-  letter-spacing: -.035em;
-  text-align: center;
-  text-transform: uppercase;
-  text-wrap: pretty;
-  pointer-events: auto;
-}
+.garden-trail { position: absolute; left: 0; width: 100%; pointer-events: none; }
+.garden-path { display: block; width: 100%; height: 100%; overflow: visible; }
+.garden-path path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.garden-path-edge { stroke: #dcd9cf; stroke-width: calc(var(--trail-width) + 3px); }
+.garden-path-ground { stroke: #eae7df; stroke-width: var(--trail-width); }
+.garden-trail-plants { position: absolute; inset: 0; }
+.garden-trail-plants .garden-flower, .garden-trail-plants .garden-grass { bottom: auto; }
+.has-walking-garden .garden-meadow { top: auto; height: var(--arrival-height); }
+.has-static-garden .garden-trail { display: none; }
 .garden-rabbit {
   --rabbit-inset: clamp(5%, calc(29% - 120px), 14%);
   --rabbit-hop-distance: clamp(44.8px, 8vw, 80px);
@@ -455,7 +441,7 @@ a:hover { color: #efee74; }
     var(--pixel) calc(6 * var(--pixel)) #171715, calc(2 * var(--pixel)) calc(5 * var(--pixel)) #171715;
 }
 .garden-grass { width: clamp(16px, 2.4vw, 24px); height: clamp(10px, 1.4vw, 14px); background: #171715; clip-path: polygon(0 35%, 12% 35%, 12% 65%, 25% 65%, 25% 100%, 37% 100%, 37% 0, 49% 0, 49% 100%, 62% 100%, 62% 65%, 75% 65%, 75% 35%, 87% 35%, 87% 20%, 100% 20%, 100% 48%, 87% 48%, 87% 80%, 75% 80%, 75% 100%, 12% 100%, 12% 80%, 0 80%); }
-.garden-resting-character { display: none; position: absolute; bottom: 16px; left: var(--hero-axis); width: var(--character-width); height: var(--character-height); transform: translateX(-50%); overflow: hidden; }
+.garden-resting-character { --character-art-unit: calc(var(--character-height) / 454); display: none; position: absolute; bottom: 16px; left: var(--hero-axis); width: var(--character-width); height: var(--character-height); transform: translateX(-50%); }
 .has-static-garden .garden-scene { position: relative; inset: auto; transform: none; }
 .has-static-garden .garden-resting-character { display: block; }
 @media (prefers-reduced-motion: reduce) {
@@ -558,7 +544,7 @@ a:hover { color: #efee74; }
   overflow: hidden;
   pointer-events: none;
 }
-.descent-scene[hidden], .descent-image[hidden], .descent-ladder-probe { display: none; }
+.descent-scene[hidden], .descent-ladder-probe { display: none; }
 .descent-ladder {
   position: absolute;
   overflow: hidden;
@@ -589,59 +575,31 @@ a:hover { color: #efee74; }
   image-rendering: pixelated;
 }
 .descent-actor {
+  --character-art-unit: var(--sprite-unit);
   position: absolute;
   will-change: transform;
-  width: calc(524 * var(--sprite-unit));
-  height: calc(1249 * var(--sprite-unit));
+  width: calc(242 * var(--sprite-unit));
+  height: calc(454 * var(--sprite-unit));
 }
-.descent-turn { position: relative; width: 100%; height: 100%; overflow: hidden; }
-.descent-image {
-  position: absolute;
-  display: block;
-  width: calc(1024 * var(--sprite-unit));
-  height: calc(1536 * var(--sprite-unit));
-  max-width: none;
-  left: calc(-256 * var(--sprite-unit));
-  top: calc(-167 * var(--sprite-unit));
-  image-rendering: pixelated;
-}
-.descent-image[data-pose="b"] { left: calc(-254 * var(--sprite-unit)); top: calc(-158 * var(--sprite-unit)); }
-.descent-image[data-pose="front"] { top: calc(-234 * var(--sprite-unit)); }
-.descent-scene.is-landed .descent-image[data-pose="front"] { top: calc(-165 * var(--sprite-unit)); }
+.descent-turn { position: relative; width: 100%; height: 100%; }
+.walking-actor { position: absolute; inset: 0; pointer-events: none; }
+.walking-actor[hidden] { display: none; }
+.descent-actor.is-walking .descent-turn { visibility: hidden; }
 .fishing-actor { position: absolute; inset: 0; pointer-events: none; }
 .fishing-actor[hidden] { display: none; }
 .descent-actor.is-fishing .descent-turn { visibility: hidden; }
-.fishing-pose {
-  --fishing-unit: calc(var(--sprite-unit) * var(--art-scale));
-  display: none;
-  position: absolute;
-  bottom: calc(4 * var(--sprite-unit));
-  left: calc(262 * var(--sprite-unit) - var(--anchor) * var(--fishing-unit));
-  width: calc(var(--crop-width) * var(--fishing-unit));
-  height: calc(var(--crop-height) * var(--fishing-unit));
-  overflow: hidden;
-  background-image: url('/images/alex-rivkin-fishing.png');
-  background-repeat: no-repeat;
-  background-size: calc(1254 * var(--fishing-unit)) calc(1254 * var(--fishing-unit));
-  background-position: calc(-1 * var(--crop-x) * var(--fishing-unit)) calc(-1 * var(--crop-y) * var(--fishing-unit));
-  image-rendering: pixelated;
-}
-.fishing-sprite-source { display: none; }
-.fishing-pose--reach { --art-scale: 2.14; --crop-x: 188; --crop-y: 55; --crop-width: 251; --crop-height: 558; --anchor: 125; }
-.fishing-pose--ready { --art-scale: 2.18; --crop-x: 697; --crop-y: 45; --crop-width: 370; --crop-height: 568; --anchor: 251; }
-.fishing-pose--cast { --art-scale: 2.23; --crop-x: 108; --crop-y: 675; --crop-width: 603; --crop-height: 537; --anchor: 120; }
-.fishing-pose--idle { --art-scale: 2.25; --crop-x: 757; --crop-y: 680; --crop-width: 473; --crop-height: 532; --anchor: 135; }
+.fishing-pose { display: none; }
 .fishing-actor[data-pose="reach"] .fishing-pose--reach,
 .fishing-actor[data-pose="ready"] .fishing-pose--ready,
 .fishing-actor[data-pose="cast"] .fishing-pose--cast,
 .fishing-actor[data-pose="idle"] .fishing-pose--idle { display: block; }
 .fishing-line-upper {
   position: absolute;
-  left: calc(var(--fishing-tip-x, 975.25) * var(--sprite-unit));
-  top: calc(var(--fishing-tip-y, 113.25) * var(--sprite-unit));
+  left: calc(var(--fishing-tip-x, 339.5) * var(--sprite-unit));
+  top: calc(var(--fishing-tip-y, 41) * var(--sprite-unit));
   display: none;
   width: 1.5px;
-  height: var(--fishing-line-height, calc(1250 * var(--sprite-unit) + 100lvh));
+  height: var(--fishing-line-height, calc(454 * var(--sprite-unit) + 100lvh));
   background: #171715;
   transform-origin: top;
 }

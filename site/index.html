@@ -24,8 +24,7 @@
   </script>
   <link rel="preload" href="/fonts/PPNeueMontrealTT-Bold.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/PPNeueMontreal-Bold.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="/images/alex-rivkin-idle.png" as="image" />
-  <link rel="preload" href="/images/alex-rivkin-jump.png" as="image" />
+  <link rel="preload" href="/images/alex-rivkin-family-core.png" as="image" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23efee74' d='M13 3h6v7h3v8h3v7h4v4H3v-4h4v-7h3v-8h3z'/%3E%3Cpath fill='%23fff' d='M10 12h12v5H10zM7 21h18v4H7z'/%3E%3C/svg%3E" />
   <style>html { background: #000; }</style>
   <link rel="stylesheet" href="/styles.css" />
@@ -46,11 +45,11 @@
     </h1>
     <div class="character-position" aria-hidden="true">
       <div class="character">
-        <div class="character-pose character-pose--idle">
-          <img class="character-image" src="/images/alex-rivkin-idle.png" width="1024" height="1536" alt="" fetchpriority="high" draggable="false" />
+        <div class="character-pose character-pose--idle character-frame" data-character-pose="idle">
+          <img class="character-image" src="/images/alex-rivkin-family-core.png" width="1536" height="1024" alt="" fetchpriority="high" draggable="false" />
         </div>
-        <div class="character-pose character-pose--jump">
-          <img class="character-image" src="/images/alex-rivkin-jump.png" width="1024" height="1536" alt="" fetchpriority="high" draggable="false" />
+        <div class="character-pose character-pose--jump character-frame" data-character-pose="jump">
+          <img class="character-image" src="/images/alex-rivkin-family-core.png" width="1536" height="1024" alt="" fetchpriority="high" draggable="false" />
         </div>
       </div>
       <div class="speech">
@@ -81,16 +80,19 @@
   <div class="scene-track">
   <div class="scene-frame">
   <div class="garden-daylight" aria-hidden="true" hidden></div>
-  <section class="garden-scene" aria-label="Design approach" hidden>
+  <section class="garden-scene" aria-hidden="true" hidden>
     <div class="garden-mountains" aria-hidden="true"></div>
-    <p class="garden-statement">
-      I design digital experiences, from the first idea to a working prototype.
-      I care about how things work and feel, and the details that give them character.
-    </p>
+    <div class="garden-trail" aria-hidden="true">
+      <svg class="garden-path" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+        <path class="garden-path-edge"></path>
+        <path class="garden-path-ground"></path>
+      </svg>
+      <div class="garden-trail-plants"></div>
+    </div>
     <div class="garden-art" aria-hidden="true">
     <div class="garden-rabbit garden-rabbit--left"><span class="garden-rabbit-sprite"></span></div>
     <div class="garden-rabbit garden-rabbit--right"><span class="garden-rabbit-sprite"></span></div>
-    <div class="garden-resting-character"><img class="character-image" src="/images/alex-rivkin-idle.png" width="1024" height="1536" alt="" draggable="false" /></div>
+    <div class="garden-resting-character"><div class="character-frame" data-character-pose="idle"><img class="character-image" src="/images/alex-rivkin-family-core.png" width="1536" height="1024" alt="" draggable="false" /></div></div>
     <div class="garden-meadow">
       <i class="garden-flower" style="--x:9%;--y:12%;--bloom:#a62b38"></i>
       <i class="garden-flower" style="--x:24%;--y:4%;--bloom:#d6a232"></i>
@@ -114,15 +116,20 @@
     <div class="descent-ladder"><div class="descent-ladder-strip"></div></div>
     <div class="descent-actor">
       <div class="descent-turn">
-        <img class="descent-image" data-pose="front" src="/images/alex-rivkin-idle.png" width="1024" height="1536" alt="" draggable="false" />
-        <img class="descent-image" data-pose="a" src="/images/alex-rivkin-climb-back-a.png" width="1024" height="1536" alt="" fetchpriority="low" draggable="false" hidden />
-        <img class="descent-image" data-pose="b" src="/images/alex-rivkin-climb-back-b.png" width="1024" height="1536" alt="" fetchpriority="low" draggable="false" hidden />
+        <div class="descent-pose character-frame" data-character-pose="idle"><img class="descent-image" data-pose="front" src="/images/alex-rivkin-family-core.png" width="1536" height="1024" alt="" draggable="false" /></div>
+        <div class="descent-pose character-frame" data-character-pose="climb-a" hidden><img class="descent-image" data-pose="a" src="/images/alex-rivkin-family-climb-v6.png" width="1536" height="1024" alt="" draggable="false" /></div>
+        <div class="descent-pose character-frame" data-character-pose="climb-b" hidden><img class="descent-image" data-pose="b" src="/images/alex-rivkin-family-climb-v6.png" width="1536" height="1024" alt="" draggable="false" /></div>
+      </div>
+      <div class="walking-actor" hidden>
+        <div class="walking-pose character-frame" data-character-pose="walk-front-1"></div>
+        <img class="walking-sprite-source" src="/images/alex-rivkin-family-walk-front.png" width="1536" height="1024" alt="" draggable="false" decoding="async" />
+        <img class="walking-sprite-source" src="/images/alex-rivkin-family-walk-back.png" width="1536" height="1024" alt="" draggable="false" decoding="async" />
       </div>
       <div class="fishing-actor" data-pose="reach" hidden>
-        <div class="fishing-pose fishing-pose--reach"><img class="fishing-sprite-source" src="/images/alex-rivkin-fishing.png" width="1254" height="1254" alt="" draggable="false" decoding="async" /></div>
-        <div class="fishing-pose fishing-pose--ready"></div>
-        <div class="fishing-pose fishing-pose--cast"></div>
-        <div class="fishing-pose fishing-pose--idle"></div>
+        <div class="fishing-pose fishing-pose--reach character-frame" data-character-pose="fishing-reach"><img class="fishing-sprite-source" src="/images/alex-rivkin-family-core.png" width="1536" height="1024" alt="" draggable="false" decoding="async" /></div>
+        <div class="fishing-pose fishing-pose--ready character-frame" data-character-pose="fishing-ready"></div>
+        <div class="fishing-pose fishing-pose--cast character-frame" data-character-pose="fishing-cast"></div>
+        <div class="fishing-pose fishing-pose--idle character-frame" data-character-pose="fishing-idle"></div>
       </div>
       <div class="fishing-line-upper"></div>
     </div>

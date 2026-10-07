@@ -8,7 +8,9 @@ import { initFooterFish } from './footer-fish.js';
 import { initFooterTitle } from './footer-title.js';
 import { initFooterActions } from './footer-actions.js';
 import { initFooterDetails } from './footer-details.js';
+import { initCharacterFrames } from './character-family.js';
 
+initCharacterFrames();
 const page = document.documentElement;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 

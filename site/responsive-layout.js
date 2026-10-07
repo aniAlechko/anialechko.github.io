@@ -1,3 +1,5 @@
+import { CHARACTER_GEOMETRY } from './character-family.js';
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const mix = (first, last, progress) => first + (last - first) * progress;
 const ease = (start, end, value) => {
@@ -43,7 +45,7 @@ export function getHeroLayout({ width, height, metrics = defaultMetrics,
   const portraitLimit = clamp(height * portraitRatio, portraitWidth, compactWidth);
   const characterHeight = Math.min(baseCharacter + Math.max(0, width - portraitLimit) * .16,
     clamp(height * .38, 104, 360));
-  const characterWidth = characterHeight * 444 / 1180;
+  const characterWidth = characterHeight * CHARACTER_GEOMETRY.width / CHARACTER_GEOMETRY.height;
   const availableName = (width - 2 * edge - characterWidth - 2 * stageGap) / 6.06;
   const wideName = Math.min(mix(availableName, Math.min(availableName, height * .42), short),
     (characterHeight + 16) / .86);

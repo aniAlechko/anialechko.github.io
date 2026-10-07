@@ -1,3 +1,5 @@
+import { characterPoint } from './character-family.js';
+
 export function initFishing({ getFishingDistance = () => 0, getPullRange = () => null } = {}) {
   const actor = document.querySelector('.descent-actor');
   const scene = document.querySelector('#descent-scene');
@@ -20,7 +22,7 @@ export function initFishing({ getFishingDistance = () => 0, getPullRange = () =>
   const transitionDuration = 180;
   const lineDuration = 360;
   const poses = ['standing', 'reach', 'ready', 'cast', 'idle'];
-  const rodTip = { x: 975.25, y: 113.25 };
+  const rodTip = characterPoint('fishing-idle', 1508, 580);
   let stage = 0;
   let transition = null;
   let lineAnimation = null;
@@ -117,8 +119,9 @@ export function initFishing({ getFishingDistance = () => 0, getPullRange = () =>
     // Scroll selects resting poses; reach and cast are timed intermediates.
     // Fit the poses into the visible landscape rather than reserving page
     // distance for them. A fast scroll can always leave the scene immediately.
-    const target = scroll < route.total + distance * .10 ? 0
-      : scroll < route.total + distance * .25 ? 2 : 4;
+    const start = pullRange?.start ?? route.total;
+    const target = scroll < start + distance * .10 ? 0
+      : scroll < start + distance * .25 ? 2 : 4;
     const now = performance.now();
     const elapsed = lastTime === null ? 0 : Math.min(64, Math.max(0, now - lastTime));
     lastTime = now;

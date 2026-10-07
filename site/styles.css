@@ -80,6 +80,17 @@ a:hover { color: #efee74; }
   padding: 130px var(--page-edge) 100px;
 }
 
+/* Measure the toolbar-free screen without changing the visible composition. */
+.hero::before {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 100vh;
+  height: 100lvh;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .hero-composition { position: relative; width: 100%; min-height: var(--character-height); }
 .hero-name {
   display: flex;

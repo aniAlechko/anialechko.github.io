@@ -47,7 +47,7 @@ export function initGarden() {
         const viewportHeight = route.viewportHeight || heroHeight;
         const halfTextHeight = statement.getBoundingClientRect().height / 2;
         const center = Math.max(64 + halfTextHeight,
-          Math.min(viewportHeight * .36, route.landingTop - 24 - halfTextHeight));
+          Math.min(viewportHeight * .40, route.landingTop - 24 - halfTextHeight));
         // Position the copy within the final viewport after the extra descent,
         // while leaving room above the character's head.
         statement.style.top = `${route.total - heroHeight + center}px`;

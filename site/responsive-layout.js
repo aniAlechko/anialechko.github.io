@@ -170,16 +170,22 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
   function viewport() {
     const width = window.innerWidth;
     const smallHeight = parseFloat(getComputedStyle(hero).minHeight) || window.innerHeight;
+    const largeHeight = parseFloat(getComputedStyle(hero, '::before').height) || smallHeight;
     const unzoomed = !visibleViewport || Math.abs(visibleViewport.scale - 1) < .01;
-    const visibleHeight = unzoomed ? (visibleViewport?.height || window.innerHeight) : smallHeight;
+    const visibleHeight = unzoomed ? Math.max(window.innerHeight,
+      (visibleViewport?.height || 0) + Math.max(0, visibleViewport?.offsetTop || 0)) : smallHeight;
+    const coverHeight = Math.ceil(Math.max(smallHeight, largeHeight, visibleHeight));
     const layoutChanged = !viewportSize || viewportSize.width !== width
-      || Math.abs(viewportSize.smallHeight - smallHeight) > .5;
-    // Cover Safari's actual opening viewport, which can be taller than 100svh.
-    // Once scrolling begins, toolbar movement must not resize the climb route.
+      || Math.abs(viewportSize.smallHeight - smallHeight) > .5
+      || Math.abs(viewportSize.largeHeight - largeHeight) > .5;
+    // Place the content in the opening viewport, but reserve the toolbar-free
+    // height before scrolling. Closing Safari's bars cannot uncover the garden
+    // early or change the character route halfway through the descent.
     if (layoutChanged || (unzoomed && Math.abs(window.scrollY) <= .5)) {
-      viewportSize = { width, smallHeight, height: Math.max(smallHeight, visibleHeight) };
+      viewportSize = { width, smallHeight, largeHeight,
+        height: Math.ceil(Math.max(smallHeight, visibleHeight)), coverHeight };
     }
-    return { width, height: viewportSize.height };
+    return { width, height: viewportSize.height, coverHeight: viewportSize.coverHeight };
   }
   function animate(time) {
     frame = 0;
@@ -203,6 +209,7 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     }
     const currentMode = displayedMode(time);
     if (lastCommit && lastCommit.width === size.width && lastCommit.height === size.height
+      && lastCommit.coverHeight === size.coverHeight
       && lastCommit.progress === currentMode.progress && lastCommit.sideProgress === currentMode.sideProgress
       && lastCommit.metrics === metrics) {
       continueTransition();
@@ -210,6 +217,7 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     }
     lastCommit = { ...size, ...currentMode, metrics };
     layout = getHeroLayout({ ...size, metrics, ...currentMode });
+    layout.height = Math.max(layout.height, size.coverHeight);
     hero.classList.add('layout-managed');
     hero.style.height = pixels(layout.height);
     hero.style.setProperty('--hero-viewport-height', pixels(size.height));
@@ -261,6 +269,7 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     const size = viewport();
     // Toolbar changes during scrolling leave the captured scene height intact.
     if (lastCommit && lastCommit.width === size.width && lastCommit.height === size.height
+      && lastCommit.coverHeight === size.coverHeight
       && !(transition && reducedMotion?.matches)) return;
     const target = getMode(size.width, size.height);
     const time = performance.now();
@@ -280,7 +289,9 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
   }
   window.addEventListener('resize', resized, { passive: true });
   window.addEventListener('scroll', returnedToTop, { passive: true });
+  window.addEventListener('pageshow', returnedToTop, { passive: true });
   visibleViewport?.addEventListener('resize', resized, { passive: true });
+  visibleViewport?.addEventListener('scroll', returnedToTop, { passive: true });
   reducedMotion?.addEventListener('change', resized);
   // Establish the covered viewport before the garden can be revealed, even
   // while fonts are pending. Font completion only refines the text measurements.
@@ -308,7 +319,9 @@ export function initResponsiveLayout({ layoutReady = Promise.resolve() } = {}) {
     listeners.clear();
     window.removeEventListener('resize', resized);
     window.removeEventListener('scroll', returnedToTop);
+    window.removeEventListener('pageshow', returnedToTop);
     visibleViewport?.removeEventListener('resize', resized);
+    visibleViewport?.removeEventListener('scroll', returnedToTop);
     reducedMotion?.removeEventListener('change', resized);
   } };
 }

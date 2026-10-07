@@ -52,13 +52,12 @@ function makeHarness({ fonts = 'ready', images = 'ready', background = 'ready', 
   const backgroundEntries = [];
   const responsiveCalls = [];
   const cloudRoutes = [];
-  const cloudHolds = [];
   const gardenRoutes = [];
   const fishingRoutes = [];
-  const fishingHolds = [];
+  const fishingDistances = [];
   const routeOrder = [];
   const smoothScrollRoutes = [];
-  let gardenHold = 0;
+  let gardenFishingDistance = 0;
   let smoothScrollOptions;
   let cloudOptions;
   let fishingOptions;
@@ -102,7 +101,6 @@ function makeHarness({ fonts = 'ready', images = 'ready', background = 'ready', 
       return { setRoute(route) {
         routeOrder.push('clouds');
         cloudRoutes.push(route);
-        cloudHolds.push(options.getHoldDistance());
       }, cleanup() {} };
     },
     initGarden() {
@@ -110,8 +108,8 @@ function makeHarness({ fonts = 'ready', images = 'ready', background = 'ready', 
       return { setRoute(route) {
         routeOrder.push('garden');
         gardenRoutes.push(route);
-        gardenHold = route?.total > 0 ? route.heroHeight || 0 : 0;
-      }, getHoldDistance: () => gardenHold,
+        gardenFishingDistance = route?.total > 0 ? route.fishingDistance || 0 : 0;
+      }, getFishingDistance: () => gardenFishingDistance,
       cleanup() {} };
     },
     initFishing(options) {
@@ -120,7 +118,7 @@ function makeHarness({ fonts = 'ready', images = 'ready', background = 'ready', 
       return { setRoute(route) {
         routeOrder.push('fishing');
         fishingRoutes.push(route);
-        fishingHolds.push(options.getHoldDistance());
+        fishingDistances.push(options.getFishingDistance());
       }, cleanup() {} };
     },
     initFooterFish() {
@@ -189,7 +187,7 @@ function makeHarness({ fonts = 'ready', images = 'ready', background = 'ready', 
   }
   return {
     classes, character, lastWord, window, warnings, backgroundEntries, advance,
-    responsiveCalls, cloudRoutes, cloudHolds, gardenRoutes, fishingRoutes, fishingHolds, routeOrder, smoothScrollRoutes,
+    responsiveCalls, cloudRoutes, gardenRoutes, fishingRoutes, fishingDistances, routeOrder, smoothScrollRoutes,
     get smoothScrollOptions() { return smoothScrollOptions; },
     get cloudOptions() { return cloudOptions; },
     get fishingOptions() { return fishingOptions; },
@@ -210,30 +208,29 @@ function makeHarness({ fonts = 'ready', images = 'ready', background = 'ready', 
 
 const tests = [
   ['garden fishing clouds and scroll easing receive routes in dependency order', async () => {
-    const initialRoute = { pitch: 42, total: 844, heroHeight: 844, arrivalBottom: 700 };
+    const initialRoute = { pitch: 42, total: 844, heroHeight: 844, sceneHeight: 844, fishingDistance: 844, arrivalBottom: 700 };
     const h = makeHarness({ initialRoute }); await h.advance(0); h.assertComplete();
     assert.equal(h.cloudRoutes[0], initialRoute, 'Clouds missed the route emitted during descent initialization');
     assert.equal(h.gardenRoutes[0], initialRoute, 'Garden missed the route emitted during descent initialization');
     assert.equal(h.fishingRoutes[0], initialRoute, 'Fishing missed the initial descent route');
     assert.equal(h.smoothScrollRoutes[0], initialRoute, 'Scroll easing missed the initial route');
     assert.equal(h.smoothScrollOptions.onScroll, undefined, 'Startup retained the obsolete JavaScript pin callback');
-    const resizedRoute = { pitch: 35, total: 650, heroHeight: 650, arrivalBottom: 520 };
+    const resizedRoute = { pitch: 35, total: 650, heroHeight: 650, sceneHeight: 650, fishingDistance: 650, arrivalBottom: 520 };
     h.descentOptions.onLayout(resizedRoute);
     h.descentOptions.onLayout(null);
     assert.deepEqual(h.cloudRoutes, [initialRoute, resizedRoute, null], 'Clouds retained an obsolete route');
     assert.deepEqual(h.gardenRoutes, h.cloudRoutes, 'Garden retained an obsolete route');
     assert.deepEqual(h.fishingRoutes, h.cloudRoutes, 'Fishing retained an obsolete route');
     assert.deepEqual(h.smoothScrollRoutes, h.cloudRoutes, 'Clouds and scroll easing use different route updates');
-    assert.deepEqual(h.cloudHolds, [844, 650, 0], 'Clouds read the garden hold before its route was updated');
-    assert.deepEqual(h.fishingHolds, [844, 650, 0], 'Fishing read the garden hold before it was updated');
+    assert.deepEqual(h.fishingDistances, [844, 650, 0], 'Fishing read the garden distance before it was updated');
     assert.deepEqual(h.routeOrder, Array.from({ length: 3 }, () => ['garden', 'fishing', 'clouds', 'scroll']).flat());
-    assert.equal(h.cloudOptions.getHoldDistance(), 0, 'The cloud callback retained a removed garden hold');
-    assert.equal(h.fishingOptions.getHoldDistance(), 0, 'Fishing retained a removed garden hold');
+    assert.equal(h.cloudOptions, undefined, 'Clouds retained garden distance options');
+    assert.equal(h.fishingOptions.getFishingDistance(), 0, 'Fishing retained a removed garden distance');
     assert.equal(h.footerFishInitializations, 1, 'Footer fish initialization depends on descent route updates');
     assert.equal(h.warnings.length, 0);
   }],
   ['failed footer fish leave contact startup and every descent feature usable', async () => {
-    const initialRoute = { pitch: 42, total: 844, heroHeight: 844 };
+    const initialRoute = { pitch: 42, total: 844, heroHeight: 844, sceneHeight: 844, fishingDistance: 844 };
     const h = makeHarness({ footerFish: 'failed', initialRoute });
     await h.advance(0); h.assertComplete();
     assert.equal(h.footerFishInitializations, 1);
@@ -252,7 +249,7 @@ const tests = [
     assert.ok(h.classes.has('skip-intro'));
   }],
   ['a failed garden leaves the hero ladder clouds and scrolling usable', async () => {
-    const initialRoute = { pitch: 42, total: 844, heroHeight: 844 };
+    const initialRoute = { pitch: 42, total: 844, heroHeight: 844, sceneHeight: 844, fishingDistance: 844 };
     const h = makeHarness({ garden: 'failed', initialRoute });
     await h.advance(0); h.assertComplete();
     assert.ok(h.classes.has('is-entering'), 'Garden failure prevented the hero entrance');
@@ -264,13 +261,13 @@ const tests = [
     assert.deepEqual(h.smoothScrollRoutes, [initialRoute, null]);
     assert.equal(h.warnings.length, 1, 'Garden failure was not isolated to one warning');
     assert.match(String(h.warnings[0][0]), /garden/i);
-    assert.equal(h.cloudOptions.getHoldDistance(), 0, 'An unavailable garden still held the cloud camera');
-    assert.equal(h.fishingOptions.getHoldDistance(), 0, 'Fishing retained an unavailable garden hold');
+    assert.equal(h.cloudOptions, undefined, 'An unavailable garden added cloud options');
+    assert.equal(h.fishingOptions.getFishingDistance(), 0, 'Fishing retained an unavailable garden distance');
     h.interact();
     assert.ok(h.classes.has('skip-intro'), 'Garden failure prevented deliberate scrolling');
   }],
   ['failed fishing leaves the garden clouds ladder and scroll easing usable', async () => {
-    const initialRoute = { pitch: 42, total: 844, heroHeight: 844 };
+    const initialRoute = { pitch: 42, total: 844, heroHeight: 844, sceneHeight: 844, fishingDistance: 844 };
     const h = makeHarness({ fishing: 'failed', initialRoute });
     await h.advance(0); h.assertComplete();
     assert.ok(h.descentOptions, 'Fishing failure prevented ladder initialization');
@@ -287,7 +284,7 @@ const tests = [
     assert.ok(h.classes.has('skip-intro'));
   }],
   ['a failed cloud layer leaves the hero, ladder and scroll easing usable', async () => {
-    const initialRoute = { pitch: 42, total: 844 };
+    const initialRoute = { pitch: 42, total: 844, heroHeight: 844, sceneHeight: 844, fishingDistance: 844 };
     const h = makeHarness({ clouds: 'failed', initialRoute });
     await h.advance(0); h.assertComplete();
     assert.ok(h.classes.has('is-entering'), 'Cloud failure prevented the hero entrance');

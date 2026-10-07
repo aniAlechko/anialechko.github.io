@@ -4,7 +4,6 @@ import vm from 'node:vm';
 
 const source = await readFile(new URL('../site/clouds.js', import.meta.url), 'utf8');
 const css = await readFile(new URL('../site/styles.css', import.meta.url), 'utf8');
-const carrierOffsets = new WeakMap();
 
 function eventTarget() {
   const events = new Map();
@@ -25,11 +24,10 @@ function eventTarget() {
 }
 
 function makeHarness({ missingScene = false, reducedMotion = false, width = 390, height = 780,
-  scroll = 0, imagesReady = true, holdDistance = 0 } = {}) {
+  scroll = 0, imagesReady = true } = {}) {
   let nextFrame = 0;
   let created = 0;
   let time = 0;
-  let routeTotal = 0;
   const frames = new Map();
   const imagePromises = new Map();
   const writes = [];
@@ -42,8 +40,6 @@ function makeHarness({ missingScene = false, reducedMotion = false, width = 390,
       append(child) { this.children.push(child); },
       replaceChildren(...children) { this.children = children; },
     };
-    carrierOffsets.set(node, scroll => routeTotal > 0
-      ? Math.max(0, Math.min(holdDistance, scroll - routeTotal)) : 0);
     if (tag === 'img') {
       node.complete = imagesReady;
       node.naturalWidth = imagesReady ? 1 : 0;
@@ -69,7 +65,6 @@ function makeHarness({ missingScene = false, reducedMotion = false, width = 390,
   };
   const context = vm.createContext({
     window, document, performance: { now: () => time },
-    getHoldDistance: () => holdDistance,
     matchMedia(query) {
       assert.equal(query, '(prefers-reduced-motion: reduce)');
       return motion;
@@ -78,14 +73,8 @@ function makeHarness({ missingScene = false, reducedMotion = false, width = 390,
     cancelAnimationFrame(id) { frames.delete(id); },
   });
   vm.runInContext(source.replace('export function initClouds', 'function initClouds')
-    + '\nthis.controller = initClouds({ getHoldDistance });', context);
-  const controller = {
-    setRoute(route) {
-      routeTotal = Number.isFinite(route?.total) && route.total > 0 ? route.total : 0;
-      return context.controller.setRoute(route);
-    },
-    cleanup() { return context.controller.cleanup(); },
-  };
+    + '\nthis.controller = initClouds();', context);
+  const controller = context.controller;
   return {
     scene, window, document, motion, writes, controller,
     get clouds() { return scene.children.flatMap(layer => layer.children); },
@@ -136,7 +125,7 @@ function imageBox(cloud, scroll = 0) {
   assert.ok(translation, 'Cloud scroll transform could not be measured');
   const left = parseFloat(cloud.style.left) + Number(translation[1]) - width / 2;
   const localTop = parseFloat(cloud.style.top) + Number(translation[2]) - height / 2;
-  const top = localTop - scroll + (carrierOffsets.get(cloud)?.(scroll) || 0);
+  const top = localTop - scroll;
   return { left, top, localTop, right: left + width, bottom: top + height, width, height };
 }
 
@@ -271,45 +260,51 @@ const tests = [
     h.controller.cleanup();
   }],
 
-  ['cloud height stays fixed through the held garden and reverses before leaving normally', async () => {
+  ['cloud height follows page scrolling and reverses before leaving normally', async () => {
     for (const [width, height] of [[390, 844], [1440, 900]]) {
-      const h = await readyHarness({ width, height, holdDistance: height },
+      const h = await readyHarness({ width, height },
         { total: height, heroHeight: height });
       h.scrollTo(height);
       const baseline = h.clouds.map(cloud => imageBox(cloud, height));
+      const depths = h.clouds.map((cloud, index) => (baseline[index].localTop
+        - parseFloat(cloud.style.top) + baseline[index].height / 2) / height);
       const visible = () => h.clouds.filter(cloud => !cloud.hidden).map(cloud => imageBox(cloud, h.window.scrollY))
         .filter(box => box.right > 0 && box.left < width && box.bottom > 0 && box.top < height);
       const moving = h.clouds.find(cloud => !cloud.hidden && centerX(cloud) > width * .5);
-      assert.ok(moving, 'No live cloud can demonstrate wind during the hold');
+      assert.ok(moving, 'No live cloud can demonstrate wind during scrolling');
       let previousX = centerX(moving);
       for (const fraction of [1.1, 1.4, 1.75, 2, 1.6, 1.2, 1]) {
         h.scrollTo(height * fraction);
         h.clouds.forEach((cloud, index) => {
           const box = imageBox(cloud, h.window.scrollY);
-          assert.ok(Math.abs(box.top - baseline[index].top) < .02,
-            `Cloud height moved during the held garden at ${fraction} route lengths`);
-          assert.ok(Math.abs(box.localTop - baseline[index].localTop) < .02,
-            'A cloud countertranslated inside the already-sticky scene');
+          const delta = h.window.scrollY - height;
+          assert.ok(Math.abs(box.top - baseline[index].top - delta * (depths[index] - 1)) < .02,
+            `Cloud height did not follow page scrolling at ${fraction} route lengths`);
+          assert.ok(Math.abs(box.localTop - baseline[index].localTop - delta * depths[index]) < .02,
+            'Cloud parallax retained a held camera position');
         });
-        assert.ok(visible().length > 0, 'Holding the garden carried every cloud out of view');
-        assert.equal(h.pendingFrames, 1, 'The held cloud field stopped its wind loop');
-        assert.ok(centerX(moving) < previousX, 'Hold or reverse scroll stopped or reversed the wind');
+        const inView = h.clouds.some(cloud => {
+          const box = imageBox(cloud, h.window.scrollY);
+          return box.bottom > 0 && box.top < height;
+        });
+        assert.equal(h.pendingFrames, inView ? 1 : 0, 'Cloud wind did not follow viewport visibility');
+        assert.ok(centerX(moving) <= previousX, 'Reverse scroll reversed the wind');
         previousX = centerX(moving);
       }
       h.scrollTo(height * 2.1);
       h.clouds.forEach((cloud, index) => assert.ok(imageBox(cloud, h.window.scrollY).top < baseline[index].top,
-        'A cloud remained vertically pinned after the garden hold ended'));
+        'A cloud remained vertically pinned after page scrolling'));
       h.scrollTo(height * 3);
       assert.ok(h.clouds.every(cloud => cloud.hidden || imageBox(cloud, h.window.scrollY).bottom < 0),
-        'Clouds remained visible after leaving the held garden');
+        'Clouds remained visible after leaving the garden');
       assert.equal(h.pendingFrames, 0, 'The departed cloud field kept running');
-      h.scrollTo(height * 1.5);
+      h.scrollTo(height);
       h.clouds.forEach((cloud, index) => {
         const box = imageBox(cloud, h.window.scrollY);
         assert.ok(Math.abs(box.top - baseline[index].top) < .02,
-          'Returning from below changed a cloud\'s held height');
+          'Returning from below changed a cloud\'s original height');
         assert.ok(Math.abs(box.localTop - baseline[index].localTop) < .02,
-          'Returning from below did not restore the held camera position');
+          'Returning from below did not restore page parallax');
       });
       assert.ok(visible().length > 0);
       h.scrollTo(0);
@@ -322,11 +317,11 @@ const tests = [
   ['landing clouds stay above the statement through long idle emission and viewport resizing', async () => {
     const height = 800;
     const total = height;
-    const h = await readyHarness({ width: 390, height, holdDistance: height }, { total, heroHeight: height });
+    const h = await readyHarness({ width: 390, height }, { total, heroHeight: height });
     assert.ok(h.clouds.every(cloud => imageBox(cloud).top >= height + 16 - .01),
       'Raising the landing band exposed a cloud on the initial hero');
     assert.equal(h.pendingFrames, 0);
-    h.scrollTo(total + height * .5);
+    h.scrollTo(total);
     for (const [width, ceiling] of [[390, .18], [1440, .23], [320, .18], [1920, .23]]) {
       h.window.innerWidth = width; h.window.emit('resize'); h.tick(0);
       let previous = h.clouds.map(cloud => ({ hidden: cloud.hidden, left: imageBox(cloud).left }));
@@ -365,8 +360,8 @@ const tests = [
 
   ['the landing ceiling changes continuously across mobile and desktop widths', async () => {
     const height = 800;
-    const h = await readyHarness({ width: 580, height, holdDistance: height });
-    h.scrollTo(height * 1.5);
+    const h = await readyHarness({ width: 580, height });
+    h.scrollTo(height);
     let previous = h.clouds.map(cloud => imageBox(cloud, h.window.scrollY).bottom);
     for (let width = 581; width <= 620; width++) {
       h.window.innerWidth = width; h.window.emit('resize'); h.tick(0);
@@ -381,53 +376,56 @@ const tests = [
     h.controller.cleanup();
   }],
 
-  ['held garden scrolling still boosts wind in both directions', async () => {
+  ['cloud-band scrolling still boosts wind in both directions', async () => {
     const height = 800;
-    const h = await readyHarness({ width: 1440, height, holdDistance: height });
-    h.scrollTo(height * 1.5);
+    const h = await readyHarness({ width: 1440, height });
+    h.scrollTo(height * .7);
     h.advance(2000);
     const cloud = h.clouds.find(cloud => !cloud.hidden && centerX(cloud) > h.window.innerWidth * .6);
-    assert.ok(cloud, 'No live cloud is available to compare held wind speeds');
-    const fixedTop = imageBox(cloud, h.window.scrollY).top;
+    assert.ok(cloud, 'No live cloud is available to compare scroll wind speeds');
+    const initialScroll = h.window.scrollY;
+    const initialBox = imageBox(cloud, initialScroll);
+    const depth = (initialBox.localTop - parseFloat(cloud.style.top) + initialBox.height / 2) / initialScroll;
     const measureTravel = step => {
       const start = centerX(cloud);
       let previous = start;
       for (let index = 0; index < 64; index++) {
         if (step) { h.window.scrollY += step; h.window.emit('scroll'); }
         h.tick(16);
-        assert.ok(centerX(cloud) < previous, 'Held wind stopped or reversed');
-        assert.ok(Math.abs(imageBox(cloud, h.window.scrollY).top - fixedTop) < .02,
-          'The scroll boost also moved the held cloud vertically');
+        assert.ok(centerX(cloud) < previous, 'Scroll wind stopped or reversed');
+        const expectedTop = initialBox.top + (h.window.scrollY - initialScroll) * (depth - 1);
+        assert.ok(Math.abs(imageBox(cloud, h.window.scrollY).top - expectedTop) < .02,
+          'The scroll boost interrupted natural cloud parallax');
         previous = centerX(cloud);
       }
       return start - previous;
     };
     const idle = measureTravel(0);
-    assert.ok(measureTravel(2) > idle * 1.2, 'Held downward scrolling did not boost wind');
-    assert.ok(measureTravel(-2) > idle * 1.2, 'Held upward scrolling did not boost wind');
+    assert.ok(measureTravel(2) > idle * 1.2, 'Downward scrolling did not boost wind');
+    assert.ok(measureTravel(-2) > idle * 1.2, 'Upward scrolling did not boost wind');
     h.controller.cleanup();
   }],
 
-  ['fresh clouds keep entering from the right while the garden is held', async () => {
+  ['fresh clouds keep entering from the right while the landing is visible', async () => {
     for (const [width, height] of [[390, 844], [1440, 900]]) {
-      const h = await readyHarness({ width, height, holdDistance: height },
+      const h = await readyHarness({ width, height },
         { total: height, heroHeight: height });
       const seeded = new Set(h.clouds.filter(cloud => !cloud.hidden));
       let previous = h.clouds.map(cloud => ({ hidden: cloud.hidden, box: imageBox(cloud) }));
       const arrivals = new Set();
       let entered = false;
-      h.window.scrollY = height * 1.65; h.window.emit('scroll');
+      h.window.scrollY = height; h.window.emit('scroll');
       for (let frame = 0; frame < 400; frame++) {
         h.tick(50);
-        assert.equal(h.pendingFrames, 1, 'Held idle time starved the cloud emitter');
+        assert.equal(h.pendingFrames, 1, 'Landing idle time starved the cloud emitter');
         h.clouds.forEach((cloud, index) => {
           const before = previous[index];
           const after = { hidden: cloud.hidden, box: imageBox(cloud, h.window.scrollY) };
           if (!after.hidden && (before.hidden || after.box.left > before.box.left + 1)) {
-            assert.ok(after.box.left > width, 'A held arrival appeared inside the viewport');
+            assert.ok(after.box.left > width, 'A landing arrival appeared inside the viewport');
             arrivals.add(cloud);
           } else if (!before.hidden && !after.hidden) {
-            assert.ok(after.box.left < before.box.left, 'A held live cloud stopped moving left');
+            assert.ok(after.box.left < before.box.left, 'A landing cloud stopped moving left');
           }
           if (!after.hidden && !seeded.has(cloud) && after.box.left < width && after.box.right > 0
             && after.box.bottom > 0 && after.box.top < height) entered = true;
@@ -435,8 +433,8 @@ const tests = [
         });
         if (frame % 100 === 0) h.writes.length = 0;
       }
-      assert.ok(arrivals.size > 1, 'The held garden produced no recurring right-edge arrivals');
-      assert.ok(entered, 'Fresh held clouds never moved into the visible viewport');
+      assert.ok(arrivals.size > 1, 'The landing produced no recurring right-edge arrivals');
+      assert.ok(entered, 'Fresh landing clouds never moved into the visible viewport');
       h.controller.cleanup();
     }
   }],

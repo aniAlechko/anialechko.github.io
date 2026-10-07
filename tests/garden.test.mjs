@@ -65,7 +65,6 @@ function makeHarness({ height = 800, heroHeight = 800, gardenTop = 800, lineCoun
   const hero = element();
   const page = element();
   const theme = element();
-  const stage = element();
   const scene = element(); scene.dataset.state = state;
   const preference = { ...eventTarget(), matches: reducedMotion };
   const lines = Array.from({ length: lineCount }, element);
@@ -73,7 +72,7 @@ function makeHarness({ height = 800, heroHeight = 800, gardenTop = 800, lineCoun
   garden.getBoundingClientRect = () => ({ top: geometry.gardenTop - window.scrollY });
   hero.getBoundingClientRect = () => ({ height: geometry.heroHeight });
   const nodes = { '.garden-scene': garden, '.garden-daylight': daylight, '.journey': journey,
-    '.hero': hero, '#statement-stage': stage, '#descent-scene': scene, 'meta[name="theme-color"]': theme };
+    '.hero': hero, '#descent-scene': scene, 'meta[name="theme-color"]': theme };
   const document = { ...eventTarget(), hidden: false, documentElement: page,
     querySelector: selector => selector === missing ? null : nodes[selector] || null,
     querySelectorAll: selector => selector === '.statement-line-text' ? lines : [] };
@@ -89,7 +88,7 @@ function makeHarness({ height = 800, heroHeight = 800, gardenTop = 800, lineCoun
   vm.runInContext(source.replace('export function initGarden', 'function initGarden')
     + '\nthis.controller = initGarden();', context);
   return {
-    window, document, geometry, garden, daylight, journey, page, theme, stage, scene, preference, lines, writes, animations,
+    window, document, geometry, garden, daylight, journey, page, theme, scene, preference, lines, writes, animations,
     controller: context.controller,
     get pendingFrames() { return frames.size; },
     get observerCount() { return observers.size; },
@@ -105,32 +104,24 @@ function makeHarness({ height = 800, heroHeight = 800, gardenTop = 800, lineCoun
   };
 }
 
-const route = { total: 800, heroHeight: 800, arrivalBottom: 700 };
-// Native sticky constraints: the frame can stick only inside its measured track.
-function frameGeometry(h, { largeViewportHeight = h.geometry.heroHeight, arrivalBottom = 0 } = {}) {
-  const distance = parseFloat(h.journey.style['--scene-hold-distance']);
-  const trackHeight = h.geometry.heroHeight + Math.max(largeViewportHeight, arrivalBottom)
-    + parseFloat(h.stage.style.height);
-  const height = trackHeight - distance;
-  const top = Math.min(Math.max(-h.window.scrollY, parseFloat(h.journey.style['--scene-pin-top'])),
-    trackHeight - height - h.window.scrollY);
-  return { top, height, trackHeight };
+const route = { total: 800, heroHeight: 800, fishingDistance: 800, sceneHeight: 800, arrivalBottom: 700 };
+// Every scene layer follows the document after the avatar lands.
+function frameGeometry(h) {
+  const trackHeight = h.geometry.heroHeight + parseFloat(h.garden.style.height);
+  return { top: -h.window.scrollY, height: trackHeight, trackHeight };
 }
 const tests = [
   ['the pale background starts below the hero and keeps fixed local geometry while scrolling', () => {
     const h = makeHarness();
     h.window.emit('scroll'); h.tick();
     assert.equal(h.garden.hidden, true, 'The garden appeared before route setup');
-    assert.equal(h.controller.getHoldDistance(), 0);
+    assert.equal(h.controller.getFishingDistance(), 0);
     h.controller.setRoute(route);
     assert.equal(h.garden.hidden, false);
     assert.equal(h.daylight.hidden, false);
     assert.equal(parseFloat(h.daylight.style.top), 800, 'Daylight leaked into the initial hero');
     assert.equal(parseFloat(h.garden.style.top), 800);
-    assert.equal(parseFloat(h.stage.style.height), 800, 'The text stage did not reserve extra scrolling space');
-    assert.equal(h.controller.getHoldDistance(), 800);
-    assert.equal(parseFloat(h.journey.style['--scene-hold-distance']), 800);
-    assert.equal(parseFloat(h.journey.style['--scene-pin-top']), -800);
+    assert.equal(h.controller.getFishingDistance(), 800);
     const daylightWrites = h.daylight.mutations.length;
     for (const scroll of [100, 300, 600, 800, 1200, 600, 0]) {
       h.scrollTo(scroll);
@@ -156,29 +147,26 @@ const tests = [
     assert.doesNotMatch(source + css + html, /garden-crossing/);
     assert.equal(rule('.garden-daylight::before'), '', 'The stepped transition edge returned');
   }],
-  ['route and viewport changes preserve the garden anchor and reserve arrival and statement space', () => {
-    const h = makeHarness(); h.controller.setRoute({ ...route, arrivalBottom: 1000 });
+  ['route and viewport changes preserve the garden anchor and physical scene height', () => {
+    const h = makeHarness(); h.controller.setRoute({ ...route, arrivalBottom: 1000, fishingDistance: 1000, sceneHeight: 1000 });
     assert.equal(parseFloat(h.garden.style.height), 1000, 'The arrival extends beyond the garden floor');
     h.geometry.gardenTop = 900;
-    h.controller.setRoute({ total: 900, heroHeight: 900, arrivalBottom: 700 });
+    h.controller.setRoute({ total: 900, heroHeight: 900, fishingDistance: 900, sceneHeight: 900, arrivalBottom: 700 });
     assert.equal(parseFloat(h.garden.style.height), 900, 'The garden became shorter than the hero');
     assert.equal(parseFloat(h.daylight.style.top), 900);
-    assert.equal(parseFloat(h.stage.style.height), 900);
-    assert.equal(h.controller.getHoldDistance(), 900);
+    assert.equal(h.controller.getFishingDistance(), 900);
     h.scrollTo(300);
     h.geometry.gardenTop = 950;
     h.window.innerHeight = 600; h.window.emit('resize'); h.tick();
     assert.equal(parseFloat(h.daylight.style.top), 900, 'The backdrop followed transformed garden bounds');
     assert.equal(parseFloat(h.garden.style.top), 900);
     assert.equal(parseFloat(h.garden.style.height), 900);
-    assert.equal(parseFloat(h.stage.style.height), 900);
-    assert.equal(h.controller.getHoldDistance(), 900, 'Viewport-only resize changed the stable hold distance');
+    assert.equal(h.controller.getFishingDistance(), 900, 'Viewport-only resize changed the stable fishing distance');
     h.geometry.heroHeight = 720; h.geometry.gardenTop = 1000;
     h.controller.setRoute(null);
     assert.equal(parseFloat(h.garden.style.height), 720);
     assert.equal(parseFloat(h.daylight.style.top), 1000);
-    assert.equal(parseFloat(h.stage.style.height), 0);
-    assert.equal(h.controller.getHoldDistance(), 0);
+    assert.equal(h.controller.getFishingDistance(), 0);
     h.geometry.heroHeight = 650; h.geometry.gardenTop = 1100;
     h.window.emit('resize'); h.tick();
     assert.equal(parseFloat(h.garden.style.height), 650);
@@ -191,7 +179,7 @@ const tests = [
     assert.equal(parseFloat(h.garden.style['--garden-character-top']), 570.94);
     h.scrollTo(800); h.setState('landed');
     assert.equal(h.animations.length, 4);
-    h.controller.setRoute({ total: 568, heroHeight: 568, arrivalBottom: 578, landedActorTop: 355.83 });
+    h.controller.setRoute({ total: 568, heroHeight: 568, fishingDistance: 578, sceneHeight: 578, arrivalBottom: 578, landedActorTop: 355.83 });
     assert.equal(parseFloat(h.garden.style['--garden-character-top']), 355.83,
       'A responsive route retained the previous avatar clearance');
     assert.equal(h.animations.length, 4, 'Updating clearance restarted the statement reveal');
@@ -205,7 +193,7 @@ const tests = [
     h.controller.setRoute(null);
     assert.equal(h.garden.style['--garden-character-top'], undefined,
       'The static avatar inherited moving-avatar clearance');
-    assert.equal(h.controller.getHoldDistance(), 0);
+    assert.equal(h.controller.getFishingDistance(), 0);
     h.controller.setRoute({ ...route, landedActorTop: 658.06 });
     assert.equal(parseFloat(h.garden.style['--garden-character-top']), 658.06);
     h.controller.cleanup();
@@ -219,9 +207,6 @@ const tests = [
       assert.equal(h.journey.classes.has('has-static-garden'), true);
       assert.equal(h.garden.hidden, false);
       assert.equal(h.daylight.hidden, false);
-      assert.equal(parseFloat(h.stage.style.height), 0);
-      assert.equal(parseFloat(h.journey.style['--scene-hold-distance']), 0);
-      assert.equal(parseFloat(h.journey.style['--scene-pin-top']), 0);
       h.scrollTo(800);
       assert.equal(parseFloat(h.daylight.style.top), h.geometry.gardenTop);
       assert.equal(h.pendingFrames, 0);
@@ -236,7 +221,7 @@ const tests = [
   ['completed landing reveals the statement together with a gentle rise without further scrolling', () => {
     for (const height of [600, 800]) {
       const h = makeHarness({ height, heroHeight: height, gardenTop: height });
-      h.controller.setRoute({ total: height, heroHeight: height });
+      h.controller.setRoute({ total: height, heroHeight: height, fishingDistance: height, sceneHeight: height });
       const values = () => h.lines.map(line => Number(line.style['--line-reveal']));
       assert.deepEqual(values(), [0, 0, 0, 0]);
       for (const fraction of [.45, .8, 1, 1.4]) {
@@ -265,12 +250,12 @@ const tests = [
       assert.equal(h.pendingFrames, 0, 'Autoplay retained a JavaScript animation loop');
       for (const fraction of [1.15, 1.4, 1.77, 2, 1.5]) {
         h.scrollTo(height * fraction);
-        assert.ok(Math.abs(parseFloat(h.garden.style.top) + frameGeometry(h).top) < .01);
+        assert.equal(parseFloat(h.garden.style.top) + frameGeometry(h).top, height - h.window.scrollY);
         assert.deepEqual(values(), [1, 1, 1, 1]);
       }
       h.scrollTo(height * 2.25);
       assert.ok(parseFloat(h.garden.style.top) + frameGeometry(h).top < 0,
-        'The held garden could not leave toward the footer');
+        'The garden could not leave toward the footer');
       assert.equal(h.animations.length, h.lines.length, 'Further scrolling replayed the reveal');
       h.controller.cleanup();
     }
@@ -307,7 +292,7 @@ const tests = [
     h.document.hidden = true; h.document.emit('visibilitychange'); h.tick();
     h.document.hidden = false; h.document.emit('visibilitychange'); h.tick();
     h.window.innerHeight = 700; h.window.emit('resize'); h.tick();
-    h.controller.setRoute({ total: 900, heroHeight: 900, arrivalBottom: 910 });
+    h.controller.setRoute({ total: 900, heroHeight: 900, fishingDistance: 910, sceneHeight: 910, arrivalBottom: 910 });
     assert.equal(h.garden.classes.has('is-statement-visible'), true);
     assert.equal(h.animations.length, 4, 'Remeasure or repeated state replayed the reveal');
     assert.equal(lineWrites(), before, 'An unchanged reveal rewrote line styles');
@@ -345,12 +330,7 @@ const tests = [
     assert.equal(withoutScene.animations.length, 0);
     withoutScene.scrollTo(800); assert.equal(withoutScene.animations.length, 4);
     withoutScene.controller.cleanup();
-    const withoutStage = makeHarness({ missing: '#statement-stage' });
-    withoutStage.controller.setRoute(route); withoutStage.scrollTo(800); withoutStage.setState('landed');
-    assert.deepEqual(withoutStage.lines.map(line => Number(line.style['--line-reveal'])), [1, 1, 1, 1]);
-    assert.equal(parseFloat(withoutStage.journey.style['--scene-hold-distance']), 0);
-    assert.equal(withoutStage.controller.getHoldDistance(), 0);
-    withoutStage.controller.cleanup();
+    assert.doesNotMatch(html, /id="statement-stage"/, 'A separate scroll spacer returned');
   }],
   ['enabling reduced motion cancels an active fade and leaves every line readable', () => {
     const h = makeHarness(); h.controller.setRoute(route); h.scrollTo(800); h.setState('landed');
@@ -363,12 +343,12 @@ const tests = [
     assert.equal(h.animations.length, 4, 'Turning motion back on replayed an already visible statement');
     h.controller.cleanup();
   }],
-  ['one native sticky frame contains every scene layer and holds exactly the reserved distance', () => {
+  ['one document frame contains every scene layer and moves continuously with the page', () => {
     assert.match(rule('.scene-track'), /position:\s*absolute/);
     assert.match(rule('.scene-track'), /inset:\s*0/);
-    assert.match(rule('.scene-frame'), /position:\s*sticky/);
-    assert.match(rule('.scene-frame'), /top:\s*var\(--scene-pin-top,\s*0px\)/);
-    assert.match(rule('.scene-frame'), /height:\s*calc\(100%\s*-\s*var\(--scene-hold-distance,\s*0px\)\)/);
+    assert.match(rule('.scene-frame'), /position:\s*relative/);
+    assert.match(rule('.scene-frame'), /height:\s*100%/);
+    assert.doesNotMatch(source + css, /--scene-pin-top|--scene-hold-distance/);
     assert.doesNotMatch(rule('.scene-track') + rule('.scene-frame'), /overflow(?:-[xy])?:\s*(?:hidden|auto|scroll)/);
     assert.doesNotMatch(source + css, /--garden-hold|--statement-drift/);
     assert.doesNotMatch(rule('.garden-scene') + rule('.descent-actor') + rule('.statement-line-text'), /(?:translate|transform)\s*:/);
@@ -388,21 +368,23 @@ const tests = [
     assert.deepEqual([...found].sort(), [...layers].sort());
     for (const [height, largeViewportHeight, arrivalBottom] of [[780, 840, 788], [800, 800, 1030], [390, 430, 410]]) {
       const h = makeHarness({ height, heroHeight: height, gardenTop: height });
-      h.controller.setRoute({ total: height, heroHeight: height, arrivalBottom });
+      const sceneHeight = Math.max(largeViewportHeight, arrivalBottom);
+      h.controller.setRoute({ total: height, heroHeight: height, fishingDistance: sceneHeight,
+        sceneHeight, arrivalBottom });
       const before = h.writes.length;
       for (const fraction of [1, 1.25, 1.5, 1.75, 2, 1.5]) {
         h.window.scrollY = height * fraction;
         h.window.emit('scroll');
-        assert.equal(parseFloat(h.garden.style.top) + frameGeometry(h, { largeViewportHeight, arrivalBottom }).top, 0,
-          'Different arrival or large-viewport heights changed the native hold interval');
+        assert.equal(parseFloat(h.garden.style.top) + frameGeometry(h).top, height - h.window.scrollY,
+          'Different arrival or large-viewport heights pinned the content');
         assert.equal(h.writes.length, before, 'Scrolling moved scene geometry through JavaScript');
         assert.equal(h.pendingFrames, 1);
       }
       h.tick();
       assert.equal(h.pendingFrames, 0);
-      const frame = frameGeometry(h, { largeViewportHeight, arrivalBottom });
+      const frame = frameGeometry(h);
       h.window.scrollY = frame.trackHeight;
-      const atContact = frameGeometry(h, { largeViewportHeight, arrivalBottom });
+      const atContact = frameGeometry(h);
       assert.equal(atContact.top + atContact.height, 0, 'The scene covered the contact section');
       assert.ok(atContact.top + parseFloat(h.garden.style.top) + parseFloat(h.garden.style.height) <= 0);
       h.controller.cleanup();
@@ -428,7 +410,7 @@ const tests = [
     h.document.hidden = false; h.document.emit('visibilitychange'); h.tick();
     assert.equal(h.garden.style['--garden-play-state'], 'running');
     h.scrollTo(1600);
-    assert.equal(h.garden.style['--garden-play-state'], 'running', 'Held garden animation stopped while still visible');
+    assert.equal(h.garden.style['--garden-play-state'], 'paused', 'Garden animation continued after leaving the viewport');
     h.scrollTo(2400);
     assert.equal(h.garden.style['--garden-play-state'], 'paused');
     assert.equal(h.pendingFrames, 0);
@@ -438,7 +420,7 @@ const tests = [
     const h = makeHarness(); h.controller.setRoute(route); h.scrollTo(800); h.setState('landed'); h.scrollTo(1200);
     assert.equal(h.animations.length, 4);
     assert.ok(h.animations.every(animation => !animation.cancelled));
-    assert.ok(h.controller.getHoldDistance() > 0);
+    assert.ok(h.controller.getFishingDistance() > 0);
     h.window.emit('scroll'); assert.equal(h.pendingFrames, 1);
     h.controller.cleanup(); h.controller.cleanup();
     assert.equal(h.pendingFrames, 0);
@@ -451,10 +433,7 @@ const tests = [
     assert.equal(h.garden.hidden, true);
     assert.equal(h.daylight.hidden, true);
     assert.equal(h.journey.classes.has('has-static-garden'), false);
-    assert.equal(h.journey.style['--scene-hold-distance'], undefined);
-    assert.equal(h.journey.style['--scene-pin-top'], undefined);
-    assert.equal(parseFloat(h.stage.style.height), 0);
-    assert.equal(h.controller.getHoldDistance(), 0);
+    assert.equal(h.controller.getFishingDistance(), 0);
     const writes = h.writes.length;
     h.window.emit('scroll'); h.window.emit('resize'); h.document.emit('visibilitychange');
     h.preference.emit('change'); h.setState('landed');

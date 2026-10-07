@@ -72,11 +72,11 @@ function makeHarness({ image = 'ready', reducedMotion = false, scroll = 0, state
     '.fishing-sprite-source': sprite };
   const document = { ...eventTarget(), hidden: false,
     querySelector: selector => selector === missing ? null : nodes[selector] || null };
-  let holdDistance = 800;
+  let fishingDistance = 808;
   const context = vm.createContext({
     window, document, performance: { now: () => now },
     matchMedia: () => motion,
-    getHoldDistance: () => holdDistance,
+    getFishingDistance: () => fishingDistance,
     getComputedStyle: node => node.style,
     requestAnimationFrame(callback) { const id = ++nextId; frames.set(id, callback); return id; },
     cancelAnimationFrame(id) { frames.delete(id); },
@@ -89,14 +89,14 @@ function makeHarness({ image = 'ready', reducedMotion = false, scroll = 0, state
     },
   });
   vm.runInContext(source.replace('export function initFishing', 'function initFishing')
-    + '\nthis.controller = initFishing({ getHoldDistance });', context);
+    + '\nthis.controller = initFishing({ getFishingDistance });', context);
   return {
     actor, scene, fishing, sprite, window, document, motion, writes,
     controller: context.controller,
     get pendingFrames() { return frames.size; },
     get pendingTimers() { return timers.size; },
     get observerCount() { return observers.size; },
-    set holdDistance(value) { holdDistance = value; },
+    set fishingDistance(value) { fishingDistance = value; },
     tick() { const callbacks = [...frames.values()]; frames.clear(); for (const callback of callbacks) callback(now); },
     advance(milliseconds) {
       const end = now + milliseconds;
@@ -121,8 +121,8 @@ function makeHarness({ image = 'ready', reducedMotion = false, scroll = 0, state
   };
 }
 
-const route = { pitch: 48, total: 800, heroHeight: 800, arrivalBottom: 808 };
-const at = fraction => route.total + 800 * fraction;
+const route = { pitch: 48, total: 800, heroHeight: 800, sceneHeight: 808, fishingDistance: 808, arrivalBottom: 808 };
+const at = fraction => route.total + route.fishingDistance * fraction;
 async function readyHarness(options = {}) {
   const h = makeHarness(options);
   h.controller.setRoute(route);
@@ -151,10 +151,10 @@ const tests = [
       assert.equal(h.pendingTimers, 0);
     }
     h.scrollTo(route.total); h.setState('landed');
-    for (const scroll of [route.total, at(.1), at(.18) - 1]) {
+    for (const scroll of [route.total, at(.05), at(.10) - 1]) {
       h.scrollTo(scroll); assertOriginal(h);
     }
-    h.scrollTo(at(.18));
+    h.scrollTo(at(.10));
     assert.equal(isFishing(h), true);
     assert.equal(h.fishing.hidden, false);
     assert.equal(h.fishing.dataset.pose, 'reach');
@@ -177,7 +177,7 @@ const tests = [
     failed.controller.cleanup();
   }],
   ['the landing observer selects the current pose without needing another scroll', async () => {
-    const h = await readyHarness({ state: 'landing', scroll: at(.7) });
+    const h = await readyHarness({ state: 'landing', scroll: at(.30) });
     assertOriginal(h);
     h.setState('landed');
     assert.equal(isFishing(h), true, 'Landing completion required an extra scroll event');
@@ -191,26 +191,26 @@ const tests = [
   ['scroll selects every pose and extends the line equally in both directions', async () => {
     const h = await readyHarness({ state: 'landed' });
     const checkpoints = [
-      [.18, 'reach', 0], [.37, 'reach', 0], [.38, 'ready', 0],
-      [.59, 'ready', 0], [.60, 'cast', 0], [.79, 'cast', 0],
+      [.10, 'reach', 0], [.15, 'reach', 0], [.20, 'ready', 0],
+      [.24, 'ready', 0], [.25, 'cast', 0], [.30, 'cast', 0],
       [.80, 'idle', 0], [.85, 'idle', .25], [.90, 'idle', .5],
       [1, 'idle', 1], [1.5, 'idle', 1],
     ];
     for (const [fraction, pose, line] of [...checkpoints, ...checkpoints.toReversed()]) {
       h.scrollTo(at(fraction));
-      assert.equal(h.fishing.dataset.pose, pose, `Incorrect pose at hold fraction ${fraction}`);
+      assert.equal(h.fishing.dataset.pose, pose, `Incorrect pose at fishing fraction ${fraction}`);
       assert.equal(isFishing(h), true);
       assertLine(h, line);
       assert.equal(h.pendingFrames, 0, 'Scroll rendering retained an animation loop');
       assert.equal(h.pendingTimers, 0, 'Scroll poses scheduled timed progression');
     }
-    h.scrollTo(at(.18) - 1); assertOriginal(h); assertLine(h, 0);
-    h.scrollTo(at(.65)); assert.equal(h.fishing.dataset.pose, 'cast');
+    h.scrollTo(at(.10) - 1); assertOriginal(h); assertLine(h, 0);
+    h.scrollTo(at(.30)); assert.equal(h.fishing.dataset.pose, 'cast');
     h.controller.cleanup();
   }],
   ['stationary scrolling never advances a pose or line and unchanged events do not rewrite styles', async () => {
     const h = await readyHarness({ state: 'landed' });
-    for (const [fraction, pose, line] of [[.25, 'reach', 0], [.5, 'ready', 0], [.7, 'cast', 0], [.9, 'idle', .5]]) {
+    for (const [fraction, pose, line] of [[.15, 'reach', 0], [.20, 'ready', 0], [.30, 'cast', 0], [.9, 'idle', .5]]) {
       h.scrollTo(at(fraction));
       const writes = h.writes.length;
       h.advance(10000);
@@ -226,7 +226,7 @@ const tests = [
     h.controller.cleanup();
   }],
   ['resize and repeated routes preserve the current pose and upper line progress', async () => {
-    const h = await readyHarness({ state: 'landed', scroll: at(.5) });
+    const h = await readyHarness({ state: 'landed', scroll: at(.20) });
     h.window.innerWidth = 1280;
     h.window.emit('resize'); h.tick(); h.controller.setRoute({ ...route });
     assert.equal(h.fishing.dataset.pose, 'ready');
@@ -238,13 +238,13 @@ const tests = [
       h.window.emit('resize'); h.tick();
       assert.equal(h.fishing.dataset.pose, 'idle'); assertLine(h, .5);
     }
-    h.holdDistance = 1200;
-    h.controller.setRoute({ ...route, total: 820 });
+    h.fishingDistance = 3200;
+    h.controller.setRoute({ ...route, total: 820, sceneHeight: 3220, fishingDistance: 3200 });
     assert.equal(h.fishing.dataset.pose, 'ready', 'A changed route retained stale scroll progress');
     assertLine(h, 0);
     h.controller.cleanup();
   }],
-  ['removed routes unavailable holds and resumed climbing restore the original avatar', async () => {
+  ['removed routes unavailable fishing distances and resumed climbing restore the original avatar', async () => {
     const h = await readyHarness({ state: 'landed', scroll: at(.9) });
     h.setState('climbing'); assertOriginal(h); assertLine(h, 0);
     h.setState('landed'); assert.equal(h.fishing.dataset.pose, 'idle'); assertLine(h, .5);
@@ -252,8 +252,8 @@ const tests = [
       h.controller.setRoute(invalid); assertOriginal(h); assertLine(h, 0);
       h.controller.setRoute(route); assert.equal(h.fishing.dataset.pose, 'idle'); assertLine(h, .5);
     }
-    for (const hold of [0, -1, NaN, Infinity]) {
-      h.holdDistance = hold; h.controller.setRoute(route); assertOriginal(h);
+    for (const distance of [0, -1, NaN, Infinity]) {
+      h.fishingDistance = distance; h.controller.setRoute(route); assertOriginal(h);
     }
     h.controller.cleanup();
   }],
@@ -269,7 +269,7 @@ const tests = [
     late.controller.cleanup();
   }],
   ['hidden pages pause rendering and resume at the latest scroll position without replay', async () => {
-    const h = await readyHarness({ state: 'landed', scroll: at(.5) });
+    const h = await readyHarness({ state: 'landed', scroll: at(.20) });
     h.window.emit('scroll');
     h.document.hidden = true; h.document.emit('visibilitychange');
     assert.equal(h.pendingFrames, 0); assert.equal(h.pendingTimers, 0);
@@ -279,7 +279,7 @@ const tests = [
     h.document.hidden = false; h.document.emit('visibilitychange'); h.tick();
     assert.equal(h.fishing.dataset.pose, 'idle'); assertLine(h, .5);
     h.document.hidden = true; h.document.emit('visibilitychange');
-    h.scrollTo(at(.1));
+    h.scrollTo(at(.05));
     h.document.hidden = false; h.document.emit('visibilitychange'); h.tick();
     assertOriginal(h); assertLine(h, 0);
     h.controller.cleanup();

@@ -37,7 +37,9 @@ function versionHtmlAssets(html) {
 }
 
 // Read the page before replacing the last successful build.
-const html = await readFile(resolve(sourceRoot, 'index.html'), 'utf8');
+const pages = await Promise.all(entries
+  .filter(entry => entry.isFile() && entry.name.endsWith('.html'))
+  .map(async entry => ({ name: entry.name, html: await readFile(resolve(sourceRoot, entry.name), 'utf8') })));
 
 // Only the generated _site directory directly inside this repository may be removed.
 if (dirname(outputRoot) !== projectRoot || !outputRoot.startsWith(projectRoot + sep)) {
@@ -55,12 +57,12 @@ try {
 await mkdir(outputRoot, { recursive: true });
 
 for (const entry of entries) {
-  if (entry.name === 'index.html') continue;
+  if (entry.isFile() && entry.name.endsWith('.html')) continue;
   await cp(resolve(sourceRoot, entry.name), resolve(outputRoot, entry.name), { recursive: true });
 }
 for (const asset of assets.filter(asset => asset.name.endsWith('.js'))) {
   await writeFile(resolve(outputRoot, asset.name), versionModuleImports(asset.source));
 }
-await writeFile(resolve(outputRoot, 'index.html'), versionHtmlAssets(html));
+for (const page of pages) await writeFile(resolve(outputRoot, page.name), versionHtmlAssets(page.html));
 await writeFile(resolve(outputRoot, '.nojekyll'), '');
 console.log(`Built portfolio in ${outputRoot}`);

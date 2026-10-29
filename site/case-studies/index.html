@@ -10,15 +10,16 @@
   <link rel="canonical" href="https://anialechko.github.io/case-studies/" />
   <link rel="preload" href="/fonts/PPNeueMontreal-Bold.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/case-studies.css" />
+  <link rel="stylesheet" href="/header.css" />
 </head>
 <body>
+  <header class="site-header" aria-label="Navigation">
+    <a class="home-link" href="/" aria-label="Back to Alex Rivkin's portfolio">BACK</a>
+  </header>
   <main id="gallery" aria-label="Case studies">
     <canvas id="project-wall" tabindex="0" aria-label="Interactive case studies wall" aria-describedby="navigation-hint"></canvas>
     <div class="loading" role="status"><span class="loading-ring" aria-hidden="true"></span><span class="sr-only">Loading case studies</span></div>
     <div id="project-fallback" hidden aria-label="All case studies"></div>
-    <header class="gallery-header">
-      <a class="home-link" href="/" aria-label="Back to Alex Rivkin's portfolio">BACK</a>
-    </header>
     <p id="navigation-hint" class="sr-only">Scroll or drag in any direction. Use arrow keys to move, plus and minus to zoom, Home to reset, and Enter to open the centered project. Pinch to zoom on touch screens.</p>
     <div class="sr-only" role="status" aria-live="polite" aria-atomic="true" id="project-readout"></div>
   </main>

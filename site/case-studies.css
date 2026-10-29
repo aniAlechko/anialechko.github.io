@@ -17,9 +17,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid #efee74; outline-offs
 [hidden] { display: none !important; }
 .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 #gallery { position: relative; width: 100%; height: 100dvh; isolation: isolate; overflow: hidden; }
-#project-wall { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity .6s cubic-bezier(.16,1,.3,1); touch-action: none; cursor: grab; outline: none; }
+#project-wall { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity .6s cubic-bezier(.16,1,.3,1); touch-action: none; cursor: grab; outline: none; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 body.ready #project-wall { opacity: 1; }
-#project-wall:focus-visible { outline: 1px solid #ffffff90; outline-offset: -5px; }
+#project-wall:focus-visible:not([data-pointer-focus]) { outline: 1px solid #ffffff90; outline-offset: -5px; }
 #project-wall.dragging { cursor: grabbing; }
 .gallery-header { position: absolute; z-index: 4; inset: calc(20px + env(safe-area-inset-top,0px)) var(--edge) auto; display: flex; align-items: center; height: 30px; pointer-events: none; }
 .gallery-header a { pointer-events: auto; }

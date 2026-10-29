@@ -7,6 +7,11 @@ const detail = document.querySelector('#project-dialog');
 const panel = detail.querySelector('.detail-panel');
 const detailStatic = document.querySelector('#detail-static');
 const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
+
+// Returning focus from a project preview should respect the latest input too.
+document.addEventListener('pointerdown', () => canvas.setAttribute('data-pointer-focus', ''), { capture: true, passive: true });
+document.addEventListener('keydown', () => canvas.removeAttribute('data-pointer-focus'), { capture: true });
+
 const state = { x: 0, y: 0, vx: 0, vy: 0, dragging: false, hover: null, hoverAmount: 0,
   pointerUv: [.5, .5], pointerAmount: 0, pointerInside: false, lastWheel: 0 };
 const pointers = new Map();

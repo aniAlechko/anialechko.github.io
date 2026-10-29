@@ -2,45 +2,36 @@
 <html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Alex Rivkin's case studies are under construction." />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Explore Alex Rivkin's case studies. New projects are coming soon." />
   <meta name="color-scheme" content="dark" />
   <meta name="theme-color" content="#000000" />
   <title>Case Studies — Alex Rivkin</title>
-  <link rel="preload" href="/fonts/PPNeueMontrealTT-Bold.woff2" as="font" type="font/woff2" crossorigin />
-  <style>
-    @font-face {
-      font-family: 'Neue Montreal Display';
-      src: url('/fonts/PPNeueMontrealTT-Bold.woff2') format('woff2');
-      font-weight: 700;
-      font-style: normal;
-      font-display: swap;
-    }
-    * { box-sizing: border-box; }
-    html { background: #000; color: #fff; color-scheme: dark; }
-    body { margin: 0; }
-    main {
-      display: grid;
-      place-items: center;
-      min-height: 100vh;
-      min-height: 100svh;
-      padding: 24px;
-    }
-    h1 {
-      margin: 0;
-      font-family: 'Neue Montreal Display', Arial, sans-serif;
-      font-size: clamp(1.5rem, 6vw, 5rem);
-      font-weight: 700;
-      line-height: 1.1;
-      letter-spacing: -.04em;
-      text-align: center;
-      text-wrap: balance;
-    }
-  </style>
+  <link rel="preload" href="/fonts/PPNeueMontreal-Bold.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/case-studies.css" />
 </head>
 <body>
-  <main>
-    <h1>UNDER CONSTRUCTION</h1>
+  <main id="gallery" aria-label="Case studies">
+    <canvas id="project-wall" tabindex="0" aria-label="Interactive case studies wall" aria-describedby="navigation-hint"></canvas>
+    <div class="loading" role="status"><span class="loading-ring" aria-hidden="true"></span><span class="sr-only">Loading case studies</span></div>
+    <div id="project-fallback" hidden aria-label="All case studies"></div>
+    <header class="gallery-header">
+      <a class="home-link" href="/" aria-label="Back to Alex Rivkin's portfolio">BACK</a>
+      <a class="brand" href="/">ALEX RIVKIN</a>
+    </header>
+    <p id="navigation-hint" class="sr-only">Scroll or drag in any direction. Use arrow keys to move, plus and minus to zoom, Home to reset, and Enter to open the centered project. Pinch to zoom on touch screens.</p>
+    <p class="explore-hint" aria-hidden="true">SCROLL. DRAG. EXPLORE.</p>
+    <div class="sr-only" role="status" aria-live="polite" aria-atomic="true" id="project-readout"></div>
   </main>
+  <dialog id="project-dialog" aria-labelledby="detail-title" aria-describedby="detail-description">
+    <div class="detail-panel">
+      <canvas id="detail-static" aria-hidden="true"></canvas><img id="detail-image" alt="" hidden />
+      <div class="detail-scrim" aria-hidden="true"></div>
+      <button id="close-project" class="close-button" type="button" aria-label="Close project"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg></button>
+      <div class="detail-caption"><p class="detail-eyebrow">CASE STUDY</p><h1 id="detail-title"></h1><p id="detail-description"></p><a id="detail-link" href="#" hidden>VIEW PROJECT <span aria-hidden="true">↗</span></a></div>
+    </div>
+  </dialog>
+  <noscript><div class="noscript-note"><h1>Case studies are coming soon.</h1><a href="/">Back to the portfolio</a></div></noscript>
+  <script type="module" src="/case-studies.js"></script>
 </body>
 </html>

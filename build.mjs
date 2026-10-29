@@ -36,10 +36,20 @@ function versionHtmlAssets(html) {
     (_, attribute, quote, url) => `${attribute}=${quote}${versionAssetUrl(url)}${quote}`);
 }
 
-// Read the page before replacing the last successful build.
-const pages = await Promise.all(entries
-  .filter(entry => entry.isFile() && entry.name.endsWith('.html'))
-  .map(async entry => ({ name: entry.name, html: await readFile(resolve(sourceRoot, entry.name), 'utf8') })));
+// Read every page, including directory indexes, before replacing the last successful build.
+async function readPages(directory, prefix = '') {
+  const children = await readdir(directory, { withFileTypes: true });
+  const pages = await Promise.all(children.map(async entry => {
+    const name = prefix + entry.name;
+    if (entry.isDirectory()) return readPages(resolve(directory, entry.name), `${name}/`);
+    if (entry.isFile() && entry.name.endsWith('.html')) {
+      return { name, html: await readFile(resolve(directory, entry.name), 'utf8') };
+    }
+    return [];
+  }));
+  return pages.flat();
+}
+const pages = await readPages(sourceRoot);
 
 // Only the generated _site directory directly inside this repository may be removed.
 if (dirname(outputRoot) !== projectRoot || !outputRoot.startsWith(projectRoot + sep)) {

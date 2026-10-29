@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,13 +12,23 @@ createServer(async (request, response) => {
     response.writeHead(405, { Allow: 'GET, HEAD' }).end();
     return;
   }
-  let path;
-  try { path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname); }
+  let url, path;
+  try {
+    url = new URL(request.url, 'http://localhost');
+    path = decodeURIComponent(url.pathname);
+  }
   catch { response.writeHead(400).end('Bad request'); return; }
   const pageRoute = path === '/' || path === '/index.html';
-  const file = resolve(root, `.${pageRoute ? '/index.html' : path}`);
+  let file = resolve(root, `.${pageRoute ? '/index.html' : path}`);
   if (!file.startsWith(root + sep)) { response.writeHead(403).end('Forbidden'); return; }
   try {
+    if ((await stat(file)).isDirectory()) {
+      if (!path.endsWith('/')) {
+        response.writeHead(308, { Location: `${url.pathname}/${url.search}` }).end();
+        return;
+      }
+      file = resolve(file, 'index.html');
+    }
     const content = await readFile(file);
     const contentType = types[extname(file)] || 'application/octet-stream';
     if (contentType.startsWith('video/') && request.headers.range) {

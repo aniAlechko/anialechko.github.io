@@ -6,6 +6,13 @@ export const projects = Array.from({ length: 12 }, (_, index) => ({
   subtitle: 'Case study coming soon',
   description: 'No signal — yet. This case study is coming soon.',
   image: null,
+  video: null,
   url: null,
   seed: index + 1,
 }));
+
+Object.assign(projects[10], {
+  subtitle: 'Fitness app · Motion design',
+  description: 'A motion study for a fitness app.',
+  video: '/images/project-11-fitness.mp4',
+});

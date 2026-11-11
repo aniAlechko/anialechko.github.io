@@ -20,6 +20,13 @@ in vec2 vUv;
 out vec4 outColor;
 uniform vec2 uResolution;
 uniform vec2 uPan;
+uniform float uCameraScale;
+uniform vec2 uLiftedCell;
+uniform vec4 uCoverRect;
+uniform vec4 uCoverSource;
+uniform float uCoverAmount;
+uniform float uCoverHover;
+uniform float uCoverRadius;
 uniform vec2 uCard;
 uniform float uGap;
 uniform float uBowY;
@@ -83,13 +90,9 @@ vec3 picture(int index, vec2 uv, float seed) {
   vec4 type = lettering(index, uv);
   return mix(base, type.rgb, type.a);
 }
-void main() {
-  vec2 normalized = vUv * 2. - 1.;
-  vec2 measured = normalized * vec2(1., uBowY);
-  vec2 curved = normalized * (1. + .22 * dot(measured, measured));
-  vec2 world = (curved * .5 + .5) * uResolution + uPan;
+vec4 shadeCard(vec2 world, vec2 sampleUv, bool cover) {
   vec2 pitch = uCard + uGap;
-  vec2 cell = floor(world / pitch);
+  vec2 cell = cover ? uLiftedCell : floor(world / pitch);
   vec2 local = world - (cell + .5) * pitch;
   ivec2 mapCell = ivec2(mod(cell, vec2(18., 12.)));
   int index = int(texelFetch(uMap, mapCell, 0).r * 255. + .5) - 1;
@@ -99,13 +102,14 @@ void main() {
   for (int slot = 0; slot < 4; slot++) {
     hovered += sameCell(cell, uHovers[slot].xy) * uHovers[slot].z;
   }
-  hovered = min(hovered, 1.);
-  float arrival = entrance(cell, pitch);
+  hovered = cover ? uCoverHover * (1. - uCoverAmount) : min(hovered, 1.);
+  float arrival = cover ? 1. : entrance(cell, pitch);
   float arrivalOpacity = smoothstep(0., .4, arrival);
   float scale = min((1. + .04 * hovered) * mix(.6, 1., overshoot(arrival)), 1.05);
+  if (cover) scale = 1. + .04 * uCoverHover;
   local /= max(scale, .01);
-  float radius = uCard.x * .15;
-  float bevel = uCard.x * .135;
+  float radius = uCard.x * (cover ? mix(.15, uCoverRadius, uCoverAmount) : .15);
+  float bevel = uCard.x * (cover ? mix(.135, .028, uCoverAmount) : .135);
   float surfaceDistance = roundedDistance(local, uCard * .5, radius);
   float aa = clamp(fwidth(surfaceDistance), .75, 2.5);
   float body = (1. - smoothstep(-aa, aa, surfaceDistance)) * arrivalOpacity;
@@ -116,8 +120,8 @@ void main() {
   float interior = clamp(-surfaceDistance / bevel, 0., 1.);
   float lens = pow(1. - interior, 2.2);
   vec2 picturePosition = local / uCard * 2.;
-  picturePosition *= 1. + .04 * dot(picturePosition, picturePosition);
-  vec2 uv = picturePosition * .5 + .5 + (vUv - uPointer) * .016 * hovered;
+  picturePosition *= 1. + .04 * (cover ? 1. - uCoverAmount : 1.) * dot(picturePosition, picturePosition);
+  vec2 uv = picturePosition * .5 + .5 + (sampleUv - uPointer) * .016 * hovered;
   vec2 refractOffset = -normal * lens * (.13 * uCard.x / uCard) * (1.55 - .55 * hovered);
   vec3 color;
   color.r = picture(index, uv + refractOffset * .93, seed).r;
@@ -133,9 +137,9 @@ void main() {
   float fill = pow(max(dot(glassNormal, normalize(vec3(.55, -.62, .56))), 0.), 9.);
   float sheen = pow(max(dot(glassNormal, normalize(vec3(.15, .2, .97))), 0.), 22.);
   color += key * .46 + fill * .20 + sheen * .14;
-  vec2 toLight = lightPosition - vUv;
+  vec2 toLight = lightPosition - sampleUv;
   color += exp(-dot(toLight, toLight) * 14.) * (.035 + hovered * .06);
-  float streak = (vUv.y - lightPosition.y) * 1.6 + (vUv.x - lightPosition.x) * .25;
+  float streak = (sampleUv.y - lightPosition.y) * 1.6 + (sampleUv.x - lightPosition.x) * .25;
   color += exp(-streak * streak * 22.) * hovered * .05;
   color *= 1. + lens * .07;
   color += exp(-pow(surfaceDistance / 1.65, 2.)) * .32;
@@ -146,15 +150,38 @@ void main() {
 
   float glow = 0.;
   for (int slot = 0; slot < 4; slot++) {
+    if (cover) break;
     vec2 hoverLocal = (world - (uHovers[slot].xy + .5) * pitch) / (1. + .04 * uHovers[slot].z);
     float hoverDistance = roundedDistance(hoverLocal, uCard * .5, radius);
     glow += uHovers[slot].z * (exp(-abs(hoverDistance) / max(bevel * .16, 1.)) * .26 + exp(-abs(hoverDistance) / max(bevel * 1.1, 1.)) * .09);
   }
   vec3 finalColor = max(color, vec3(0.)) * body + glow * vec3(.55, .68, 1.);
   float alpha = max(body, clamp(glow * 2.2, 0., 1.));
-  vec2 edge = abs(vUv * 2. - 1.);
-  float fade = (1. - smoothstep(.85, 1., edge.x)) * (1. - smoothstep(.82, 1., edge.y));
-  outColor = vec4(finalColor * fade, alpha * fade);
+  vec2 edge = abs(sampleUv * 2. - 1.);
+  float fade = cover ? 1. : (1. - smoothstep(.85, 1., edge.x)) * (1. - smoothstep(.82, 1., edge.y));
+  float visible = cover ? 1. : 1. - sameCell(cell, uLiftedCell);
+  return vec4(finalColor * fade, alpha * fade) * visible;
+}
+vec2 wallPosition(vec2 uv, float cameraScale) {
+  vec2 normalized = uv * 2. - 1.;
+  vec2 measured = normalized * vec2(1., uBowY);
+  vec2 curved = normalized * (1. + .22 * dot(measured, measured));
+  return (curved * .5 / cameraScale + .5) * uResolution + uPan;
+}
+void main() {
+  vec4 wall = shadeCard(wallPosition(vUv, uCameraScale), vUv, false);
+  if (uCoverRect.z > 0.) {
+    wall.rgb *= 1. - smoothstep(.05, .92, uCoverAmount);
+    vec2 coverUv = (vUv * uResolution - uCoverRect.xy) / uCoverRect.zw;
+    if (all(greaterThanEqual(coverUv, vec2(0.))) && all(lessThanEqual(coverUv, vec2(1.)))) {
+      vec2 sourceUv = (uCoverSource.xy + coverUv * uCoverSource.zw) / uResolution;
+      vec2 original = wallPosition(sourceUv, 1.);
+      vec2 flatPosition = (uLiftedCell + .5) * (uCard + uGap) + (coverUv - .5) * uCard * (1. + .04 * uCoverHover);
+      vec4 cover = shadeCard(mix(original, flatPosition, uCoverAmount), mix(sourceUv, vUv, uCoverAmount), true);
+      wall = cover + wall * (1. - cover.a);
+    }
+  }
+  outColor = wall;
 }`;
 
 function seededRandom(seed) {
@@ -221,6 +248,7 @@ export class GlassWallRenderer {
     this.canvas = canvas;
     this.imageGeneration = 0;
     this.pendingImages = new Set();
+    this.videoItems = [];
     this.destroyed = false;
     this.gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, powerPreference: 'high-performance' });
     if (!this.gl) throw new Error('WebGL2 unavailable');
@@ -245,7 +273,7 @@ export class GlassWallRenderer {
     this.buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     const attribute = gl.getAttribLocation(this.program, 'aPosition'); gl.enableVertexAttribArray(attribute); gl.vertexAttribPointer(attribute, 2, gl.FLOAT, false, 0, 0);
-    this.uniforms = Object.fromEntries(['Resolution', 'Pan', 'Card', 'Gap', 'BowY', 'Time', 'Intro', 'Pointer', 'PointAmount', 'Labels', 'Images', 'Map', 'AtlasGrid', 'EntryCount'].map(name => [name, gl.getUniformLocation(this.program, 'u' + name)]));
+    this.uniforms = Object.fromEntries(['Resolution', 'Pan', 'CameraScale', 'LiftedCell', 'CoverRect', 'CoverSource', 'CoverAmount', 'CoverHover', 'CoverRadius', 'Card', 'Gap', 'BowY', 'Time', 'Intro', 'Pointer', 'PointAmount', 'Labels', 'Images', 'Map', 'AtlasGrid', 'EntryCount'].map(name => [name, gl.getUniformLocation(this.program, 'u' + name)]));
     this.uniforms.Hovers = gl.getUniformLocation(this.program, 'uHovers[0]');
     this.uniforms.Seeds = gl.getUniformLocation(this.program, 'uSeeds[0]');
     this.uniforms.HasImages = gl.getUniformLocation(this.program, 'uHasImages[0]');
@@ -345,6 +373,13 @@ export class GlassWallRenderer {
 
   _cancelImages() {
     this.imageGeneration++;
+    this.pauseVideos();
+    for (const { video } of this.videoItems) {
+      if (video.dataset.presentation === 'detail') continue;
+      video.removeAttribute('src');
+      video.load();
+    }
+    this.videoItems = [];
     for (const image of this.pendingImages) {
       image.onload = image.onerror = null;
       image.removeAttribute('src');
@@ -361,11 +396,12 @@ export class GlassWallRenderer {
     this.imageMask = new Float32Array(64);
     gl.uniform1fv(this.uniforms.HasImages, this.imageMask);
     // Keep empty galleries lightweight: no image atlas until an entry has an image.
-    if (!entries.some(entry => typeof entry.image === 'string' && entry.image.trim())) {
+    if (!entries.some(entry => entry.image || entry.video)) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
       return;
     }
-    const cellWidth = Math.min(512, Math.floor(maximum / columns));
+    // The same cover texture also fills the expanded card.
+    const cellWidth = Math.min(1024, Math.floor(maximum / columns), Math.floor(maximum / (rows * .63)));
     const cellHeight = Math.round(cellWidth * .63);
     const atlas = document.createElement('canvas');
     atlas.width = columns * cellWidth; atlas.height = rows * cellHeight;
@@ -398,6 +434,44 @@ export class GlassWallRenderer {
       };
       image.src = entry.image;
     }
+    for (const [index, entry] of entries.entries()) {
+      if (!entry.video) continue;
+      const video = document.createElement('video');
+      video.muted = true; video.defaultMuted = true; video.loop = true; video.playsInline = true;
+      video.preload = 'auto'; video.src = entry.video;
+      const tile = document.createElement('canvas');
+      tile.width = cellWidth; tile.height = cellHeight;
+      this.videoItems.push({ video, index, tile, context: tile.getContext('2d'), atlasContext: ctx,
+        x: index % columns * cellWidth, y: Math.floor(index / columns) * cellHeight,
+        active: false, lastTime: -1 });
+    }
+  }
+
+  pauseVideos() {
+    for (const item of this.videoItems) { item.video.pause(); item.active = false; }
+  }
+
+  _updateVideos(playing) {
+    const gl = this.gl;
+    for (const item of this.videoItems) {
+      const { video, tile, context, atlasContext, x, y, index } = item;
+      const active = playing && !document.hidden;
+      if (video.dataset.presentation !== 'detail' && active !== item.active) {
+        item.active = active;
+        if (active) video.play().catch(() => {});
+        else video.pause();
+      }
+      if (!context || video.readyState < 2 || !video.videoWidth || item.lastTime === video.currentTime) continue;
+      const scale = Math.max(tile.width / video.videoWidth, tile.height / video.videoHeight);
+      const w = video.videoWidth * scale, h = video.videoHeight * scale;
+      context.drawImage(video, (tile.width - w) / 2, (tile.height - h) / 2, w, h);
+      atlasContext.drawImage(tile, x, y);
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, gl.RGBA, gl.UNSIGNED_BYTE, tile);
+      this.imageMask[index] = 1;
+      gl.useProgram(this.program); gl.uniform1fv(this.uniforms.HasImages, this.imageMask);
+      item.lastTime = video.currentTime;
+    }
   }
 
   resize(width, height, dpr = 1, zoom = .75) {
@@ -415,9 +489,10 @@ export class GlassWallRenderer {
 
   get layout() { return { ...this._layout }; }
 
-  draw({ pan = [0, 0], time = 0, hover = {}, pointer = [.5, .42], pointAmount = 0, intro = COMPLETE_INTRO } = {}) {
+  draw({ pan = [0, 0], time = 0, hover = {}, pointer = [.5, .42], pointAmount = 0, intro = COMPLETE_INTRO, videosPlaying = true, cameraScale = 1, liftedCell = null, cover = null } = {}) {
     const gl = this.gl;
     if (gl.isContextLost()) throw new Error('WebGL context lost');
+    this._updateVideos(videosPlaying);
     const dpr = this._layout.dpr;
     this._advanceHovers(hover);
     this.lastIntro = Number.isFinite(intro) ? intro : COMPLETE_INTRO;
@@ -426,6 +501,16 @@ export class GlassWallRenderer {
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.mapTexture);
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
     gl.uniform2f(this.uniforms.Pan, pan[0] * dpr, pan[1] * dpr);
+    gl.uniform1f(this.uniforms.CameraScale, cameraScale);
+    gl.uniform2f(this.uniforms.LiftedCell, liftedCell?.[0] ?? 1e8, liftedCell?.[1] ?? 1e8);
+    const rect = cover?.rect, source = cover?.source;
+    gl.uniform4f(this.uniforms.CoverRect, (rect?.left || 0) * dpr, (rect?.top || 0) * dpr,
+      (rect?.width || 0) * dpr, (rect?.height || 0) * dpr);
+    gl.uniform4f(this.uniforms.CoverSource, (source?.left || 0) * dpr, (source?.top || 0) * dpr,
+      (source?.width || 0) * dpr, (source?.height || 0) * dpr);
+    gl.uniform1f(this.uniforms.CoverAmount, cover?.amount || 0);
+    gl.uniform1f(this.uniforms.CoverHover, cover?.hover || 0);
+    gl.uniform1f(this.uniforms.CoverRadius, cover?.radius || .035);
     gl.uniform1f(this.uniforms.Time, time); gl.uniform1f(this.uniforms.Intro, this.lastIntro);
     gl.uniform3fv(this.uniforms.Hovers, this.hoverUniform);
     gl.uniform2f(this.uniforms.Pointer, pointer[0], pointer[1]); gl.uniform1f(this.uniforms.PointAmount, clamp(pointAmount || 0, 0, 1));

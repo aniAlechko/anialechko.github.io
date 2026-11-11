@@ -6,6 +6,32 @@ export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+// The cinema lift starts gently, accelerates, then settles over a long tail.
+// Use one clock for the lifted screen, wall camera and surrounding controls.
+export function cinemaEase(progress) {
+  const t = clamp(progress, 0, 1);
+  if (t === 0 || t === 1) return t;
+  const bezier = (v, a, b) => 3 * (1 - v) ** 2 * v * a + 3 * (1 - v) * v * v * b + v ** 3;
+  let low = 0, high = 1;
+  for (let i = 0; i < 24; i++) {
+    const middle = (low + high) / 2;
+    if (bezier(middle, .32, .18) < t) low = middle; else high = middle;
+  }
+  return bezier((low + high) / 2, 0, 1);
+}
+
+export function nearestProjectCell(cells, columns, rows, index, center, pitch) {
+  let closest = null, distance = Infinity;
+  for (let row = 0; row < rows; row++) for (let column = 0; column < columns; column++) {
+    if (cells[row * columns + column] !== index) continue;
+    const x = column + Math.round((center[0] - column - .5) / columns) * columns;
+    const y = row + Math.round((center[1] - row - .5) / rows) * rows;
+    const squared = ((x + .5 - center[0]) * pitch[0]) ** 2 + ((y + .5 - center[1]) * pitch[1]) ** 2;
+    if (squared < distance) { distance = squared; closest = [x, y]; }
+  }
+  return closest;
+}
+
 export function normalizeWheelDelta(event, pageHeight) {
   const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? pageHeight : 1;
   const horizontal = event.shiftKey && !event.deltaX;

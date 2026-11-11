@@ -6,6 +6,32 @@ export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+export function normalizeWheelDelta(event, pageHeight) {
+  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? pageHeight : 1;
+  const horizontal = event.shiftKey && !event.deltaX;
+  return {
+    x: (horizontal ? event.deltaY : event.deltaX) * unit,
+    y: (horizontal ? 0 : event.deltaY) * unit,
+  };
+}
+
+export function wheelPanTarget(position, target, delta) {
+  // A reverse gesture replaces the unfinished travel on that axis immediately.
+  const retarget = (current, pending, change) =>
+    ((pending - current) * change < 0 ? current : pending) + change;
+  return { x: retarget(position.x, target.x, delta.x), y: retarget(position.y, target.y, delta.y) };
+}
+
+export function wheelPanStep(position, target, elapsedMs) {
+  const elapsed = Number.isFinite(elapsedMs) ? clamp(elapsedMs, 0, 64) : 0;
+  if (!elapsed) return { ...position, settled: position.x === target.x && position.y === target.y };
+  const amount = -Math.expm1(-elapsed / 100);
+  const x = position.x + (target.x - position.x) * amount;
+  const y = position.y + (target.y - position.y) * amount;
+  const settled = Math.max(Math.abs(target.x - x), Math.abs(target.y - y)) < .1;
+  return settled ? { ...target, settled: true } : { x, y, settled: false };
+}
+
 function projection(x, y, width, height) {
   const nx = x / width * 2 - 1;
   const ny = y / height * 2 - 1;

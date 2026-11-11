@@ -1,6 +1,6 @@
 import { projects } from './case-studies-data.js';
 import { GlassWallRenderer } from './case-studies-renderer.js';
-import { clamp, unprojectPoint, preserveAnchor, inertiaStep } from './case-studies-motion.js';
+import { clamp, unprojectPoint, preserveAnchor, inertiaStep, normalizeWheelDelta, wheelPanTarget, wheelPanStep } from './case-studies-motion.js';
 
 const canvas = document.querySelector('#project-wall');
 const detail = document.querySelector('#project-dialog');
@@ -13,17 +13,17 @@ document.addEventListener('pointerdown', () => canvas.setAttribute('data-pointer
 document.addEventListener('keydown', () => canvas.removeAttribute('data-pointer-focus'), { capture: true });
 
 const state = { x: 0, y: 0, vx: 0, vy: 0, dragging: false, hover: null, hoverAmount: 0,
-  pointerUv: [.5, .5], pointerAmount: 0, pointerInside: false, lastWheel: 0 };
+  pointerUv: [.5, .5], pointerAmount: 0, pointerInside: false };
 const pointers = new Map();
 const noiseBuffers = new WeakMap();
 let renderer, width = innerWidth, height = innerHeight, zoom = .75;
 let frame = 0, lastTime = 0, snowTime = 0, lastSnowFrame = -1, bootStart = 0;
 let fallback = false, fallbackCanvases = [], snowPaused = motionPreference.matches;
-let drag, pinch, viewTween, currentProject, selectedProject, selectedCell, openingRect;
+let drag, pinch, viewTween, wheelTarget, currentProject, selectedProject, selectedCell, openingRect;
 let panelAnimation, closing = false, lastOpener;
 
 const entries = () => projects.map(project => ({ ...project }));
-const stopMovement = () => { state.vx = state.vy = 0; viewTween = null; };
+const stopMovement = () => { state.vx = state.vy = 0; viewTween = wheelTarget = null; };
 const easeOut = value => 1 - Math.pow(1 - value, 3);
 
 function paintStatic(target, seed) {
@@ -200,14 +200,15 @@ function updateHover(x,y) {
   state.hover = card?.inside ? card : null;
 }
 canvas.addEventListener('wheel', event => {
-  if (!renderer || fallback || detail.open) return;
-  event.preventDefault(); viewTween = null;
+  if (!renderer || fallback || detail.open || state.dragging || pinch) return;
+  event.preventDefault();
   if (event.ctrlKey || event.metaKey) { changeZoom(zoom * Math.exp(-event.deltaY * .004),[event.clientX,event.clientY]); return; }
-  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? height : 1;
-  const dx = (event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX) * unit;
-  const dy = (event.shiftKey && !event.deltaX ? 0 : event.deltaY) * unit;
-  state.x += dx; state.y += dy; state.vx = dx * .22; state.vy = dy * .22;
-  state.lastWheel = performance.now(); state.hover = null;
+  const delta = normalizeWheelDelta(event, height);
+  if (!Number.isFinite(delta.x) || !Number.isFinite(delta.y) || (!delta.x && !delta.y)) return;
+  viewTween = null;
+  state.vx = state.vy = 0;
+  wheelTarget = wheelPanTarget(state, wheelTarget || state, delta);
+  state.hover = null;
 }, { passive: false });
 
 canvas.addEventListener('pointerdown', event => {
@@ -265,7 +266,7 @@ canvas.addEventListener('pointerleave', () => { if (!state.dragging) state.hover
 canvas.addEventListener('keydown', event => {
   if (detail.open) return;
   const direction = { ArrowDown: [0,22],ArrowUp: [0,-22],ArrowLeft: [-22,0],ArrowRight: [22,0] }[event.key];
-  if (direction) { event.preventDefault(); viewTween = null; state.vx += direction[0]; state.vy += direction[1]; state.lastWheel = 0; }
+  if (direction) { event.preventDefault(); viewTween = wheelTarget = null; state.vx += direction[0]; state.vy += direction[1]; }
   else if (event.key === 'Enter' && currentProject) { event.preventDefault(); const card = renderer?.pick(width/2,height/2,[state.x,state.y]); openProject(currentProject,card?.cell); }
   else if (event.key === 'Home') { event.preventDefault(); resetView(); }
   else if (event.key === '+' || event.key === '=') { event.preventDefault(); changeZoom(zoom*1.12); }
@@ -290,16 +291,30 @@ function render(time) {
       state.x = viewTween.from.x+(viewTween.to.x-viewTween.from.x)*eased;
       state.y = viewTween.from.y+(viewTween.to.y-viewTween.from.y)*eased;
       if (t === 1) viewTween = null;
-    } else if (!state.dragging && !pinch && !detail.open && time-state.lastWheel > 90) {
-      const step = inertiaStep(state.vx,state.vy,elapsed);
-      state.x += step.dx; state.y += step.dy; state.vx = step.vx; state.vy = step.vy;
+    } else if (!state.dragging && !pinch && !detail.open) {
+      if (wheelTarget) {
+        const step = wheelPanStep(state, wheelTarget, elapsed);
+        state.x = step.x; state.y = step.y;
+        if (step.settled) wheelTarget = null;
+      } else {
+        const step = inertiaStep(state.vx,state.vy,elapsed);
+        state.x += step.dx; state.y += step.dy; state.vx = step.vx; state.vy = step.vy;
+      }
     }
     // Keep the infinite map numerically close to its origin after long explorations.
     if (!state.dragging && !detail.open && !viewTween) {
       const layout = renderer.layout;
       const periodX = (layout.cardWidth+layout.gap)*18, periodY = (layout.cardHeight+layout.gap)*12;
-      if (Math.abs(state.x) > periodX*4) { state.x %= periodX; state.hover = null; }
-      if (Math.abs(state.y) > periodY*4) { state.y %= periodY; state.hover = null; }
+      if (Math.abs(state.x) > periodX*4) {
+        const wrapped = state.x % periodX;
+        if (wheelTarget) wheelTarget.x += wrapped - state.x;
+        state.x = wrapped; state.hover = null;
+      }
+      if (Math.abs(state.y) > periodY*4) {
+        const wrapped = state.y % periodY;
+        if (wheelTarget) wheelTarget.y += wrapped - state.y;
+        state.y = wrapped; state.hover = null;
+      }
     }
     state.hoverAmount += ((state.hover && !state.dragging ? 1 : 0)-state.hoverAmount)*(1-Math.exp(-elapsed/75));
     state.pointerAmount += ((state.pointerInside ? 1 : 0)-state.pointerAmount)*(1-Math.exp(-elapsed/100));

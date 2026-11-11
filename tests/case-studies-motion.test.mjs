@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { barrelPoint, unprojectPoint, preserveAnchor, inertiaStep, clamp }
+import { barrelPoint, unprojectPoint, preserveAnchor, inertiaStep, clamp,
+  normalizeWheelDelta, wheelPanTarget, wheelPanStep, cinemaEase, nearestProjectCell }
   from '../site/case-studies-motion.js';
 
 const close = (actual, expected, tolerance = 1e-8) => {
@@ -12,6 +13,25 @@ function test(name, run) {
   passed++;
   console.log(`PASS ${name}`);
 }
+
+test('cinema lift is monotonic and reversible, with exact resting endpoints', () => {
+  close(cinemaEase(0), 0); close(cinemaEase(1), 1);
+  let previous = 0;
+  for (let step = 1; step <= 100; step++) {
+    const progress = cinemaEase(step / 100);
+    assert.ok(progress >= previous && progress <= 1);
+    previous = progress;
+  }
+  assert.ok(cinemaEase(.1) < .1);
+  assert.ok(cinemaEase(.6) > .85);
+});
+
+test('project switching chooses the nearest repeated card across both lattice seams', () => {
+  const cells = [0, 1, 2, 2, 0, 1];
+  assert.deepEqual(nearestProjectCell(cells, 3, 2, 1, [3.1, .4], [400, 250]), [2, -1]);
+  assert.deepEqual(nearestProjectCell(cells, 3, 2, 0, [-2.5, -1.5], [400, 250]), [-3, -2]);
+  assert.equal(nearestProjectCell(cells, 3, 2, 9, [0, 0], [400, 250]), null);
+});
 
 test('barrel projection retains the center and bows the edges by the shader amount', () => {
   assert.deepEqual(barrelPoint(640, 360, 1280, 720), [640, 360]);
@@ -128,6 +148,100 @@ test('inertia integrates the final fraction before stopping at the velocity thre
   close(result.dy, -.01);
   assert.equal(result.vx, 0);
   assert.equal(result.vy, 0);
+});
+
+test('a wheel notch moves smoothly across frames instead of jumping by the event distance', () => {
+  const position = { x: 0, y: 0 };
+  const target = wheelPanTarget(position, position, { x: 0, y: 120 });
+  assert.deepEqual(position, { x: 0, y: 0 });
+  assert.deepEqual(target, { x: 0, y: 120 });
+  const first = wheelPanStep(position, target, 1000 / 60);
+  assert.ok(first.y > 0 && first.y < 60);
+  assert.equal(first.x, 0);
+  assert.equal(first.settled, false);
+  const second = wheelPanStep(first, target, 1000 / 60);
+  assert.ok(second.y > first.y && second.y < target.y);
+});
+
+test('wheel motion follows the same timed input path at 30, 60 and 120 Hz', () => {
+  function simulate(rate) {
+    let position = { x: 0, y: 0 }, target = { ...position };
+    const samples = [];
+    for (const delta of [{ x: 48, y: 120 }, { x: 0, y: 80 }, { x: 24, y: 40 }]) {
+      target = wheelPanTarget(position, target, delta);
+      for (let frame = 0; frame < rate / 10; frame++) {
+        position = wheelPanStep(position, target, 1000 / rate);
+      }
+      assert.equal(position.settled, false);
+      samples.push({ x: position.x, y: position.y });
+    }
+    return samples;
+  }
+  const reference = simulate(60);
+  for (const rate of [30, 120]) {
+    const samples = simulate(rate);
+    samples.forEach((sample, index) => {
+      close(sample.x, reference[index].x);
+      close(sample.y, reference[index].y);
+    });
+  }
+});
+
+test('a decaying trackpad stream settles at its supplied distance without an extra fling', () => {
+  let position = { x: 0, y: 0 }, target = { ...position };
+  const deltas = [80, 60, 40, 24, 12, 6, 2, 1];
+  for (const y of deltas) {
+    target = wheelPanTarget(position, target, { x: 0, y });
+    position = wheelPanStep(position, target, 1000 / 60);
+  }
+  assert.deepEqual(target, { x: 0, y: deltas.reduce((sum, delta) => sum + delta, 0) });
+  for (let frame = 0; frame < 180 && !position.settled; frame++) {
+    const next = wheelPanStep(position, target, 1000 / 60);
+    assert.ok(next.y >= position.y && next.y <= target.y);
+    position = next;
+  }
+  assert.equal(position.settled, true);
+  assert.equal(position.y, target.y);
+  assert.equal(position.x, target.x);
+  for (let frame = 0; frame < 30; frame++) {
+    position = wheelPanStep(position, target, 1000 / 60);
+    assert.equal(position.y, target.y);
+    assert.equal(position.settled, true);
+  }
+});
+
+test('reversing the wheel discards the old pending direction on the next frame', () => {
+  const position = { x: 15, y: 50 };
+  const target = wheelPanTarget(position, { x: 100, y: 200 }, { x: 0, y: -20 });
+  assert.deepEqual(target, { x: 100, y: 30 });
+  const next = wheelPanStep(position, target, 1000 / 60);
+  assert.ok(next.y < position.y && next.y > target.y);
+  assert.ok(next.x > position.x && next.x < target.x);
+  const reverseX = wheelPanTarget(position, { x: 100, y: 200 }, { x: -10, y: 5 });
+  assert.deepEqual(reverseX, { x: 5, y: 205 });
+});
+
+test('wheel smoothing does not advance when no time has elapsed', () => {
+  const position = { x: 5, y: -10 }, target = { x: 80, y: 140 };
+  for (const elapsed of [0, -1, -100]) {
+    const next = wheelPanStep(position, target, elapsed);
+    assert.equal(next.x, position.x);
+    assert.equal(next.y, position.y);
+    assert.equal(next.settled, false);
+  }
+  const almostThere = wheelPanStep({ x: 79.95, y: 139.95 }, target, 0);
+  assert.equal(almostThere.x, 79.95);
+  assert.equal(almostThere.y, 139.95);
+});
+
+test('wheel input preserves pixel, line, page and Shift axis conventions', () => {
+  const event = { deltaX: 3, deltaY: 7, deltaMode: 0, shiftKey: false };
+  assert.deepEqual(normalizeWheelDelta(event, 800), { x: 3, y: 7 });
+  assert.deepEqual(normalizeWheelDelta({ ...event, deltaMode: 1 }, 800), { x: 48, y: 112 });
+  assert.deepEqual(normalizeWheelDelta({ ...event, deltaMode: 2 }, 800), { x: 2400, y: 5600 });
+  assert.deepEqual(normalizeWheelDelta({ ...event, deltaX: 0, shiftKey: true }, 800), { x: 7, y: 0 });
+  assert.deepEqual(normalizeWheelDelta({ ...event, deltaX: 0, deltaMode: 1, shiftKey: true }, 800), { x: 112, y: 0 });
+  assert.deepEqual(normalizeWheelDelta({ ...event, shiftKey: true }, 800), { x: 3, y: 7 });
 });
 
 test('clamp includes both boundaries', () => {
